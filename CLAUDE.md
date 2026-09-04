@@ -151,6 +151,23 @@ if (res.ok) {
 - **"Propager en prod"** : merger `develop` dans `main` (`main_jg` ou `master` selon le dépôt), puis
   pusher `main`, puis revenir sur `develop`.
 
+## Corrections du CLAUDE.md
+
+Toute correction du `CLAUDE.md` doit **toujours** être faite dans la branche `feature/claude_md`,
+jamais directement dans `develop` ou dans une autre branche de feature. Contrairement aux branches
+`feature/xxx` habituelles, `feature/claude_md` est **permanente** : elle n'est jamais supprimée et
+sert à chaque future modification du fichier.
+
+Marche à suivre à chaque correction :
+1. Se placer sur `feature/claude_md`.
+2. Si `develop` a avancé depuis, merger `develop` dans `feature/claude_md` pour repartir d'une base
+   à jour.
+3. Faire la modification dans `feature/claude_md`, commiter.
+4. Propager en pré-prod : merger `feature/claude_md` dans `develop`, puis pusher `develop`.
+
+Le merge de `develop` dans `main` (propager en prod) se fait ultérieurement, séparément, une fois
+`develop` complétée et complètement validée — sans rien de spécifique au `CLAUDE.md`.
+
 ## Git commands
 
 - **Commits** : messages en français casuel, ligne unique, pas de Conventional Commits, pas de
