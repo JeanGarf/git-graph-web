@@ -280,6 +280,9 @@ async function loadRepo({keepBranches=false} = {}){
   if (!m){ setStatus("Format attendu : proprietaire/depot", true); return; }
   S.owner = m[1]; S.repo = m[2];
   LS.set('repo', S.owner + '/' + S.repo);
+
+  // Le titre de la page reflète le dépôt saisi
+  document.title = `${S.owner}/${S.repo} -- git-graph-web`;
   S.busy = true;
 
   try{
