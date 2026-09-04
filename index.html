@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Couloirs — historique Git</title>
+<meta name="description" content="Historique des commits GitHub avec les branches en couloirs verticaux, lisible sur mobile.">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0e131c" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f7f8fa" media="(prefers-color-scheme: light)">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#0e131c; --panel:#161d2a; --panel2:#1c2534; --line:#25303f;
+  --text:#dbe3ee; --dim:#8a99ad; --accent:#5b9cf5; --danger:#e06c60;
+  --row:54px; --gutter:120px;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
+}
+@media (prefers-color-scheme: light){
+  :root{ --bg:#f7f8fa; --panel:#ffffff; --panel2:#eef1f5; --line:#e0e5ec;
+         --text:#1b2432; --dim:#6a788c; --accent:#1f6feb; }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--text); font-family:var(--sans);
+  font-size:15px; line-height:1.35; overscroll-behavior-y:none;
+  padding-bottom:env(safe-area-inset-bottom);
+}
+button,input{font:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer}
+
+/* ---------- barre haute ---------- */
+header{
+  position:sticky; top:0; z-index:30; background:var(--bg);
+  border-bottom:1px solid var(--line); padding:env(safe-area-inset-top) 12px 0;
+}
+.bar{display:flex;align-items:center;gap:8px;height:52px}
+.repo-field{
+  flex:1; display:flex; align-items:center; gap:8px; min-width:0;
+  background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:0 10px; height:38px;
+}
+.repo-field input{flex:1;min-width:0;background:none;border:0;outline:none;font-size:15px}
+.repo-field input::placeholder{color:var(--dim)}
+.icon-btn{
+  height:38px; min-width:38px; display:grid; place-items:center;
+  border:1px solid var(--line); border-radius:9px; background:var(--panel); color:var(--dim);
+}
+.icon-btn:focus-visible,.repo-field:focus-within{outline:2px solid var(--accent);outline-offset:1px}
+.icon-btn[aria-pressed="true"]{color:var(--accent);border-color:var(--accent)}
+.icon-btn svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.go{background:var(--accent);color:#fff;border-color:transparent;padding:0 14px;font-weight:600}
+
+/* ---------- panneaux dépliants ---------- */
+.drawer{border-bottom:1px solid var(--line);background:var(--panel);padding:12px;display:none}
+.drawer.open{display:block}
+.drawer h2{margin:0 0 8px;font-size:13px;font-weight:600;color:var(--dim)}
+.drawer p{margin:0 0 10px;font-size:13px;color:var(--dim)}
+.drawer a{color:var(--accent)}
+.token-row{display:flex;gap:8px}
+.token-row input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:9px 10px;outline:none;font-family:var(--mono);font-size:13px}
+.branches{display:flex;flex-wrap:wrap;gap:6px;max-height:38vh;overflow:auto;margin-bottom:10px}
+.chip{
+  display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:99px;
+  border:1px solid var(--line);background:var(--bg);font-size:13px;color:var(--dim);
+}
+.chip[aria-pressed="true"]{color:var(--text);border-color:currentColor}
+.chip .dot{width:8px;height:8px;border-radius:99px;background:currentColor;opacity:.55}
+.chip[aria-pressed="true"] .dot{opacity:1}
+.drawer-actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);border-radius:9px;padding:8px 12px;font-size:14px;background:var(--bg)}
+.btn.primary{background:var(--accent);color:#fff;border-color:transparent;font-weight:600}
+
+/* ---------- statut ---------- */
+.status{padding:10px 14px;font-size:13px;color:var(--dim);display:flex;gap:8px;align-items:center}
+.status.error{color:var(--danger)}
+.spinner{width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:99px;animation:spin .7s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(1turn)}}
+@media (prefers-reduced-motion:reduce){.spinner{animation-duration:2s}}
+
+/* ---------- le graphe ---------- */
+#graph{position:relative}
+#lanes{position:absolute;top:0;left:0;pointer-events:none}
+#rows{margin:0;padding:0;list-style:none;margin-left:var(--gutter)}
+.commit{
+  height:var(--row); padding:0 14px 0 4px; display:flex; flex-direction:column;
+  justify-content:center; gap:2px; overflow:hidden; cursor:pointer;
+}
+.commit:active{background:var(--panel)}
+.commit .title{
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:14.5px;
+}
+.commit .meta{
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  font-size:12px; color:var(--dim);
+}
+.commit .meta .sha{font-family:var(--mono);font-size:11.5px;margin-right:7px}
+.refs{display:inline-flex;gap:4px;margin-right:6px;vertical-align:middle}
+.ref{
+  font-size:11px; padding:1px 6px; border-radius:5px; border:1px solid currentColor;
+  font-weight:600; white-space:nowrap;
+}
+.ref.tag{border-style:dashed}
+
+/* ---------- pied ---------- */
+.foot{padding:16px 14px 32px;text-align:center}
+.foot .btn{width:100%;max-width:320px}
+.empty{padding:56px 24px;text-align:center;color:var(--dim)}
+.empty strong{display:block;color:var(--text);font-size:17px;margin-bottom:8px;font-weight:600}
+.empty p{margin:0 auto;max-width:34em;font-size:14px}
+
+/* ---------- feuille de détail ---------- */
+.sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:40;opacity:0;pointer-events:none;transition:opacity .16s}
+.sheet-bg.open{opacity:1;pointer-events:auto}
+.sheet{
+  position:fixed;left:0;right:0;bottom:0;z-index:41;background:var(--panel);
+  border-top:1px solid var(--line); border-radius:16px 16px 0 0;
+  padding:8px 16px calc(24px + env(safe-area-inset-bottom));
+  transform:translateY(101%); transition:transform .2s cubic-bezier(.2,.7,.3,1);
+  max-height:80vh; overflow:auto;
+}
+.sheet.open{transform:none}
+@media (prefers-reduced-motion:reduce){.sheet{transition:none}}
+.grip{width:36px;height:4px;border-radius:9px;background:var(--line);margin:6px auto 14px}
+.sheet pre{
+  margin:0 0 14px; white-space:pre-wrap; word-break:break-word;
+  font-family:var(--sans); font-size:15px; line-height:1.45;
+}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px;margin-bottom:16px}
+.kv dt{color:var(--dim)}
+.kv dd{margin:0;font-family:var(--mono);font-size:12.5px;word-break:break-all}
+.sheet .btn{display:block;text-align:center;text-decoration:none;color:inherit}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="bar">
+    <div class="repo-field">
+      <input id="repo" type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false"
+             placeholder="proprietaire/depot" aria-label="Dépôt GitHub">
+    </div>
+    <button class="icon-btn go" id="load">Ouvrir</button>
+    <button class="icon-btn" id="toggle-branches" aria-pressed="false" aria-label="Choisir les branches" title="Branches">
+      <svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 8.5v7M8.5 6h5a4 4 0 0 1 4 4v.5"/></svg>
+    </button>
+    <button class="icon-btn" id="toggle-token" aria-pressed="false" aria-label="Jeton d'accès" title="Jeton">
+      <svg viewBox="0 0 24 24"><circle cx="8" cy="12" r="3.2"/><path d="M11.2 12H21m-3 0v3m-3-3v2.2"/></svg>
+    </button>
+  </div>
+
+  <section class="drawer" id="drawer-token">
+    <h2>Jeton d'accès personnel</h2>
+    <p>Sans jeton : dépôts publics, 60 requêtes par heure. Avec jeton : dépôts privés et 5 000 requêtes par heure.
+       Créez un jeton <em>fine-grained</em> avec la seule permission <strong>Contents : Read-only</strong> sur les dépôts voulus.
+       Il reste dans le stockage local de ce navigateur et ne part que vers api.github.com.</p>
+    <div class="token-row">
+      <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_… ou ghp_…" aria-label="Jeton">
+      <button class="btn primary" id="save-token">Enregistrer</button>
+    </div>
+    <div class="drawer-actions" style="margin-top:10px">
+      <button class="btn" id="clear-token">Supprimer le jeton</button>
+      <a class="btn" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Créer un jeton</a>
+    </div>
+  </section>
+
+  <section class="drawer" id="drawer-branches">
+    <h2>Branches affichées</h2>
+    <div class="branches" id="branch-list"></div>
+    <div class="drawer-actions">
+      <button class="btn primary" id="apply-branches">Recharger</button>
+      <button class="btn" id="all-branches">Tout</button>
+      <button class="btn" id="none-branches">Aucune</button>
+    </div>
+  </section>
+</header>
+
+<div class="status" id="status" hidden></div>
+
+<main>
+  <div id="graph">
+    <svg id="lanes" aria-hidden="true"></svg>
+    <ol id="rows"></ol>
+  </div>
+  <div class="empty" id="empty">
+    <strong>Un historique Git, en couloirs</strong>
+    <p>Saisissez <span style="font-family:var(--mono)">proprietaire/depot</span> ci-dessus. Chaque branche occupe sa
+       colonne, les fusions se rejoignent. Pour vos dépôts privés, ajoutez d'abord un jeton avec la clé.</p>
+  </div>
+  <div class="foot" id="foot" hidden>
+    <button class="btn" id="more">Charger 100 commits de plus</button>
+  </div>
+</main>
+
+<div class="sheet-bg" id="sheet-bg"></div>
+<section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-label="Détail du commit">
+  <div class="grip"></div>
+  <pre id="sheet-msg"></pre>
+  <dl class="kv" id="sheet-kv"></dl>
+  <a class="btn" id="sheet-link" target="_blank" rel="noopener">Ouvrir sur GitHub</a>
+</section>
+
+<script>
+"use strict";
+
+/* ===================== réglages visuels ===================== */
+const ROW = 54, PAD = 13, DOT = 4.6, MAX_GUTTER = 132, LANE_MAX = 18, LANE_MIN = 11;
+const COLORS = ['#c02000','#ff8a01','#ddcd5d','#88b046','#1765a0','#5757ff','#8057ff','#8000c0'];
+const color = i => COLORS[i % COLORS.length];
+
+/* ===================== état ===================== */
+const S = {
+  owner:'', repo:'', token:'', depth:100,
+  branches:[], selected:new Set(), refs:new Map(), commits:new Map(), order:[], busy:false
+};
+const $ = s => document.querySelector(s);
+// Les attributs de présentation SVG n'acceptent pas var() partout : on lit la couleur réelle.
+const bgColor = () => getComputedStyle(document.body).backgroundColor || '#0e131c';
+const LS = {
+  get:(k,d)=>{ try{ return localStorage.getItem('gl.'+k) ?? d; }catch(e){ return d; } },
+  set:(k,v)=>{ try{ v==null ? localStorage.removeItem('gl.'+k) : localStorage.setItem('gl.'+k,v); }catch(e){} }
+};
+
+/* ===================== API GitHub ===================== */
+class GhError extends Error{ constructor(status,msg){ super(msg); this.status=status; } }
+
+async function gh(path){
+  const headers = {'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};
+  if (S.token) headers.Authorization = 'Bearer ' + S.token;
+  let res;
+  try { res = await fetch('https://api.github.com' + path, {headers}); }
+  catch(e){ throw new GhError(0,"Pas de réseau. Vérifiez la connexion."); }
+  if (!res.ok){
+    const body = await res.json().catch(()=>({}));
+    throw new GhError(res.status, humanError(res, body));
+  }
+  return res.json();
+}
+
+function humanError(res, body){
+  const left = res.headers.get('x-ratelimit-remaining');
+  if (res.status === 401) return "Jeton refusé. Il a peut-être expiré ou été révoqué.";
+  if (res.status === 403 && left === '0')
+    return S.token ? "Quota d'API épuisé. Réessayez dans une heure."
+                   : "Quota anonyme épuisé (60 requêtes/h). Ajoutez un jeton avec la clé.";
+  if (res.status === 403) return "Accès refusé : le jeton ne couvre pas ce dépôt.";
+  if (res.status === 404)
+    return S.token ? "Dépôt introuvable, ou le jeton n'a pas la permission Contents sur ce dépôt."
+                   : "Dépôt introuvable. S'il est privé, ajoutez un jeton avec la clé.";
+  if (res.status === 409) return "Ce dépôt n'a aucun commit.";
+  return (body && body.message) ? body.message : ("Erreur " + res.status);
+}
+
+async function ghPages(path, pages){
+  const out = [];
+  for (let p = 1; p <= pages; p++){
+    const sep = path.includes('?') ? '&' : '?';
+    const batch = await gh(`${path}${sep}per_page=100&page=${p}`);
+    out.push(...batch);
+    if (batch.length < 100) break;
+  }
+  return out;
+}
+
+async function pool(items, width, fn){
+  const it = items[Symbol.iterator]();
+  await Promise.all(Array.from({length:width}, async () => {
+    for (const item of it) await fn(item);
+  }));
+}
+
+/* ===================== chargement ===================== */
+async function loadRepo({keepBranches=false} = {}){
+  if (S.busy) return;
+  const raw = $('#repo').value.trim()
+    .replace(/^https?:\/\/(www\.)?github\.com\//i,'').replace(/\.git$/,'').replace(/^\/|\/$/g,'');
+  const m = raw.match(/^([\w.-]+)\/([\w.-]+)/);
+  if (!m){ setStatus("Format attendu : proprietaire/depot", true); return; }
+  S.owner = m[1]; S.repo = m[2];
+  LS.set('repo', S.owner + '/' + S.repo);
+
+  // Le titre de la page reflète le dépôt saisi
+  document.title = `${S.owner}/${S.repo} -- git-graph-web`;
+  S.busy = true;
+
+  try{
+    setStatus("Lecture du dépôt…");
+    const info = await gh(`/repos/${S.owner}/${S.repo}`);
+
+    setStatus("Lecture des branches…");
+    const branches = await ghPages(`/repos/${S.owner}/${S.repo}/branches`, 3);
+    branches.sort((a,b)=> a.name === info.default_branch ? -1 : b.name === info.default_branch ? 1
+                        : a.name.localeCompare(b.name,'fr'));
+    S.branches = branches;
+
+    if (!keepBranches || S.selected.size === 0){
+      S.selected = new Set(branches.slice(0, 12).map(b => b.name));
+      S.selected.add(info.default_branch);
+    } else {
+      S.selected = new Set([...S.selected].filter(n => branches.some(b => b.name === n)));
+      if (!S.selected.size) S.selected.add(info.default_branch);
+    }
+    renderBranchPicker();
+
+    const chosen = branches.filter(b => S.selected.has(b.name));
+    const pages = Math.ceil(S.depth / 100);
+    const commits = new Map();
+    let done = 0;
+
+    await pool(chosen, 5, async (b) => {
+      for (let p = 1; p <= pages; p++){
+        const batch = await gh(`/repos/${S.owner}/${S.repo}/commits`
+          + `?sha=${encodeURIComponent(b.name)}&per_page=100&page=${p}`);
+        for (const c of batch){
+          if (commits.has(c.sha)) continue;
+          commits.set(c.sha, {
+            sha: c.sha,
+            parents: c.parents.map(p => p.sha),
+            title: (c.commit.message || '').split('\n')[0],
+            message: c.commit.message || '',
+            author: (c.commit.author && c.commit.author.name) || (c.author && c.author.login) || '—',
+            date: (c.commit.author && c.commit.author.date) || c.commit.committer.date,
+            t: Date.parse(c.commit.committer.date),
+            url: c.html_url
+          });
+        }
+        if (batch.length < 100) break;
+      }
+      done++;
+      setStatus(`Lecture des commits… ${done}/${chosen.length} branches`);
+    });
+
+    // références : têtes de branches puis étiquettes
+    const refs = new Map();
+    const addRef = (sha, name, kind) => {
+      if (!refs.has(sha)) refs.set(sha, []);
+      refs.get(sha).push({name, kind});
+    };
+    for (const b of chosen) addRef(b.commit.sha, b.name, b.name === info.default_branch ? 'head' : 'branch');
+    try{
+      const tags = await gh(`/repos/${S.owner}/${S.repo}/tags?per_page=100`);
+      for (const t of tags) if (commits.has(t.commit.sha)) addRef(t.commit.sha, t.name, 'tag');
+    }catch(e){ /* les étiquettes sont facultatives */ }
+
+    S.commits = commits;
+    S.refs = refs;
+    S.order = topoOrder(commits);
+    draw();
+    setStatus(`${S.order.length} commits sur ${chosen.length} branche${chosen.length>1?'s':''}`);
+    setTimeout(()=>setStatus(null), 2600);
+  } catch(err){
+    setStatus(err.message || String(err), true);
+    if (err.status === 401 || err.status === 403 || err.status === 404) openDrawer('token', true);
+  } finally {
+    S.busy = false;
+  }
+}
+
+/* ===================== tri topologique, le plus récent d'abord ===================== */
+function topoOrder(map){
+  const indeg = new Map();
+  for (const sha of map.keys()) indeg.set(sha, 0);
+  for (const c of map.values())
+    for (const p of c.parents) if (indeg.has(p)) indeg.set(p, indeg.get(p) + 1);
+
+  const ready = [];
+  const push = c => {                    // insertion triée par date décroissante
+    let lo = 0, hi = ready.length;
+    while (lo < hi){ const mid = (lo + hi) >> 1; (ready[mid].t > c.t) ? lo = mid + 1 : hi = mid; }
+    ready.splice(lo, 0, c);
+  };
+  for (const c of map.values()) if (indeg.get(c.sha) === 0) push(c);
+
+  const out = [];
+  while (ready.length){
+    const c = ready.shift();
+    out.push(c);
+    for (const p of c.parents){
+      if (!indeg.has(p)) continue;
+      const n = indeg.get(p) - 1;
+      indeg.set(p, n);
+      if (n === 0) push(map.get(p));
+    }
+  }
+  return out;
+}
+
+/* ===================== affectation des couloirs ===================== */
+function assignLanes(order, map){
+  const lanes = [];                       // lanes[i] = sha attendu dans ce couloir, ou null
+  const col = new Map(), row = new Map(), edges = [];
+  order.forEach((c, i) => row.set(c.sha, i));
+
+  const alloc = sha => {
+    let i = lanes.indexOf(null);
+    if (i === -1){ i = lanes.length; lanes.push(null); }
+    lanes[i] = sha;
+    return i;
+  };
+
+  order.forEach((c, r) => {
+    let i = lanes.indexOf(c.sha);
+    if (i === -1) i = alloc(c.sha);
+    col.set(c.sha, i);
+    lanes[i] = null;                      // le couloir se libère : le commit est posé
+
+    const known = c.parents.filter(p => map.has(p));
+    c.truncated = known.length < c.parents.length;
+
+    known.forEach((p, k) => {
+      let j = lanes.indexOf(p);
+      if (j === -1) j = (k === 0) ? (lanes[i] = p, i) : alloc(p);
+      edges.push({ r1:r, c1:i, c2:j, to:p });
+    });
+  });
+
+  return { col, row, edges, laneCount: Math.max(1, lanes.length) };
+}
+
+/* ===================== rendu ===================== */
+function draw(){
+  const rowsEl = $('#rows'), svg = $('#lanes');
+  rowsEl.textContent = ''; svg.textContent = '';
+  $('#empty').hidden = S.order.length > 0;
+  $('#foot').hidden = S.order.length === 0;
+  if (!S.order.length){ svg.setAttribute('height', 0); return; }
+
+  const { col, row, edges, laneCount } = assignLanes(S.order, S.commits);
+  // La gouttière s'adapte au nombre de couloirs sans jamais les rogner :
+  // les traits se resserrent d'abord, puis la colonne de texte cède du terrain.
+  const budget = Math.min(MAX_GUTTER, Math.round(window.innerWidth * 0.45));
+  const lane = laneCount > 1
+    ? Math.max(LANE_MIN, Math.min(LANE_MAX, (budget - 2*PAD) / (laneCount - 1)))
+    : LANE_MAX;
+  const gutter = Math.ceil(PAD * 2 + (laneCount - 1) * lane);
+  document.documentElement.style.setProperty('--gutter', gutter + 'px');
+
+  const X = c => PAD + c * lane;
+  const Y = r => r * ROW + ROW / 2;
+  const height = S.order.length * ROW;
+  svg.setAttribute('width', gutter);
+  svg.setAttribute('height', height);
+  svg.setAttribute('viewBox', `0 0 ${gutter} ${height}`);
+
+  const ns = 'http://www.w3.org/2000/svg';
+  const frag = document.createDocumentFragment();
+  const node = (n, attrs) => { const e = document.createElementNS(ns, n);
+    for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+
+  // arêtes d'abord, pastilles ensuite
+  for (const e of edges){
+    const r2 = row.get(e.to);
+    if (r2 == null) continue;
+    const x1 = X(e.c1), y1 = Y(e.r1), x2 = X(e.c2), y2 = Y(r2);
+    const d = (x1 === x2)
+      ? `M${x1} ${y1}V${y2}`
+      : `M${x1} ${y1}C${x1} ${y1 + ROW*.45} ${x2} ${y1 + ROW*.35} ${x2} ${y1 + ROW*.9}V${y2}`;
+    frag.appendChild(node('path', { d, fill:'none', stroke:color(e.c2), 'stroke-width':1.9,
+                                    'stroke-linecap':'round' }));
+  }
+
+  S.order.forEach((c, r) => {
+    const i = col.get(c.sha), x = X(i), y = Y(r), k = color(i);
+    if (c.truncated)
+      frag.appendChild(node('path', { d:`M${x} ${y}v${ROW*0.55}`, stroke:k, 'stroke-width':1.9,
+                                      'stroke-dasharray':'2 4', 'stroke-linecap':'round', fill:'none' }));
+    const tip = S.refs.has(c.sha);
+    if (tip) frag.appendChild(node('circle', { cx:x, cy:y, r:DOT + 3, fill:'none', stroke:k,
+                                               'stroke-width':1.6, opacity:.55 }));
+    frag.appendChild(node('circle', { cx:x, cy:y, r:DOT, fill:k }));
+    if (c.parents.length > 1)
+      frag.appendChild(node('circle', { cx:x, cy:y, r:DOT - 2, fill:bgColor() }));
+  });
+  svg.appendChild(frag);
+
+  // lignes de texte
+  const rowsFrag = document.createDocumentFragment();
+  S.order.forEach((c, r) => {
+    const li = document.createElement('li');
+    li.className = 'commit';
+    li.dataset.sha = c.sha;
+    li.tabIndex = 0;
+
+    const title = document.createElement('div');
+    title.className = 'title';
+    const rs = S.refs.get(c.sha);
+    if (rs){
+      const holder = document.createElement('span');
+      holder.className = 'refs';
+      holder.style.color = color(col.get(c.sha));
+      for (const ref of rs.slice(0, 3)){
+        const b = document.createElement('span');
+        b.className = 'ref' + (ref.kind === 'tag' ? ' tag' : '');
+        b.textContent = ref.name;
+        holder.appendChild(b);
+      }
+      title.appendChild(holder);
+    }
+    title.appendChild(document.createTextNode(c.title || '(sans message)'));
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const sha = document.createElement('span');
+    sha.className = 'sha';
+    sha.textContent = c.sha.slice(0, 7);
+    meta.append(sha, document.createTextNode(`${c.author} · ${relDate(c.date)}`));
+
+    li.append(title, meta);
+    rowsFrag.appendChild(li);
+  });
+  rowsEl.appendChild(rowsFrag);
+}
+
+function relDate(iso){
+  const d = new Date(iso), s = (Date.now() - d) / 1000;
+  if (s < 60) return "à l'instant";
+  if (s < 3600) return `il y a ${Math.floor(s/60)} min`;
+  if (s < 86400) return `il y a ${Math.floor(s/3600)} h`;
+  if (s < 86400*30) return `il y a ${Math.floor(s/86400)} j`;
+  return d.toLocaleDateString('fr-FR', { day:'numeric', month:'short', year:'2-digit' });
+}
+
+/* ===================== feuille de détail ===================== */
+function openSheet(sha){
+  const c = S.commits.get(sha);
+  if (!c) return;
+  $('#sheet-msg').textContent = c.message || '(sans message)';
+  const kv = $('#sheet-kv');
+  kv.textContent = '';
+  const add = (k, v) => {
+    const dt = document.createElement('dt'), dd = document.createElement('dd');
+    dt.textContent = k; dd.textContent = v; kv.append(dt, dd);
+  };
+  add('Empreinte', c.sha);
+  add('Auteur', c.author);
+  add('Date', new Date(c.date).toLocaleString('fr-FR'));
+  add(c.parents.length > 1 ? 'Parents' : 'Parent', c.parents.map(p => p.slice(0,7)).join('  ') || '(commit racine)');
+  $('#sheet-link').href = c.url;
+  $('#sheet').classList.add('open');
+  $('#sheet-bg').classList.add('open');
+}
+function closeSheet(){ $('#sheet').classList.remove('open'); $('#sheet-bg').classList.remove('open'); }
+
+/* ===================== panneaux ===================== */
+function openDrawer(which, force){
+  const el = $('#drawer-' + which), btn = $('#toggle-' + which);
+  const open = force != null ? force : !el.classList.contains('open');
+  el.classList.toggle('open', open);
+  btn.setAttribute('aria-pressed', String(open));
+  if (open && which === 'token') $('#token').focus();
+}
+
+function renderBranchPicker(){
+  const list = $('#branch-list');
+  list.textContent = '';
+  S.branches.forEach((b, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'chip';
+    btn.type = 'button';
+    btn.setAttribute('aria-pressed', String(S.selected.has(b.name)));
+    btn.style.color = S.selected.has(b.name) ? color(i) : '';
+    const dot = document.createElement('span');
+    dot.className = 'dot';
+    btn.append(dot, document.createTextNode(b.name));
+    btn.onclick = () => {
+      S.selected.has(b.name) ? S.selected.delete(b.name) : S.selected.add(b.name);
+      renderBranchPicker();
+    };
+    list.appendChild(btn);
+  });
+}
+
+function setStatus(msg, isError){
+  const el = $('#status');
+  el.hidden = !msg;
+  el.className = 'status' + (isError ? ' error' : '');
+  el.textContent = '';
+  if (!msg) return;
+  if (!isError && S.busy){
+    const sp = document.createElement('span');
+    sp.className = 'spinner';
+    el.appendChild(sp);
+  }
+  el.appendChild(document.createTextNode(msg));
+}
+
+/* ===================== branchements ===================== */
+$('#load').onclick = () => { S.depth = 100; loadRepo(); };
+$('#repo').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); S.depth = 100; loadRepo(); } });
+$('#more').onclick = () => { S.depth += 100; loadRepo({keepBranches:true}); };
+$('#toggle-token').onclick = () => openDrawer('token');
+$('#toggle-branches').onclick = () => openDrawer('branches');
+$('#save-token').onclick = () => {
+  S.token = $('#token').value.trim();
+  LS.set('token', S.token || null);
+  openDrawer('token', false);
+  if (S.owner) loadRepo({keepBranches:true});
+};
+$('#clear-token').onclick = () => { S.token = ''; $('#token').value = ''; LS.set('token', null);
+                                    setStatus("Jeton supprimé."); };
+$('#apply-branches').onclick = () => { openDrawer('branches', false); loadRepo({keepBranches:true}); };
+$('#all-branches').onclick = () => { S.selected = new Set(S.branches.map(b => b.name)); renderBranchPicker(); };
+$('#none-branches').onclick = () => { S.selected = new Set(); renderBranchPicker(); };
+$('#rows').addEventListener('click', e => {
+  const li = e.target.closest('.commit');
+  if (li) openSheet(li.dataset.sha);
+});
+$('#rows').addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' '){
+    const li = e.target.closest('.commit');
+    if (li){ e.preventDefault(); openSheet(li.dataset.sha); }
+  }
+});
+$('#sheet-bg').onclick = closeSheet;
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
+window.addEventListener('resize', () => { if (S.order.length) draw(); });
+
+/* ===================== démarrage ===================== */
+S.token = LS.get('token', '') || '';
+$('#token').value = S.token;
+const params = new URLSearchParams(location.search);
+const start = params.get('repo') || LS.get('repo', '');
+if (start){ $('#repo').value = start; loadRepo(); }
+
+if ('serviceWorker' in navigator)
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+</script>
+</body>
+</html>
