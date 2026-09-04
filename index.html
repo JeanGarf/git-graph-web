@@ -53,6 +53,14 @@ header{
 .icon-btn svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .go{background:var(--accent);color:#fff;border-color:transparent;padding:0 14px;font-weight:600}
 
+/* ---------- bandeau pré-production ---------- */
+.preprod-banner{
+  position:fixed; z-index:35; top:calc(env(safe-area-inset-top) + 53px); right:12px;
+  padding:2px 10px; border-radius:999px; background:#e67e22; color:#fff;
+  font-size:11px; font-weight:700; letter-spacing:.08em; white-space:nowrap;
+  box-shadow:0 1px 4px rgba(0,0,0,.35); pointer-events:none;
+}
+
 /* ---------- panneaux dépliants ---------- */
 .drawer{border-bottom:1px solid var(--line);background:var(--panel);padding:12px;display:none}
 .drawer.open{display:block}
@@ -176,6 +184,8 @@ header{
     </div>
   </section>
 </header>
+
+<div class="preprod-banner" id="preprod-banner" hidden>PRÉ-PRODUCTION</div>
 
 <div class="status" id="status" hidden></div>
 
@@ -618,6 +628,10 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet()
 window.addEventListener('resize', () => { if (S.order.length) draw(); });
 
 /* ===================== démarrage ===================== */
+
+// Le bandeau de pré-production ne s'affiche que si l'app est servie depuis /preprod/
+$('#preprod-banner').hidden = !location.pathname.includes('/preprod/');
+
 S.token = LS.get('token', '') || '';
 $('#token').value = S.token;
 const params = new URLSearchParams(location.search);
