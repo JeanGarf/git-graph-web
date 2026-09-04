@@ -1,0 +1,38 @@
+name: deploy-app-preprod
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+# Déploiement en pré-production. Se déclenche à chaque push sur `develop` et publie les fichiers
+# de la PWA sur la même branche `gh-pages` que la production, mais sous le sous-dossier
+# `/preprod/`, pour ne jamais toucher aux fichiers de production qui vivent à la racine (déployés
+# séparément par deploy-app.yml).
+#
+# URLs :
+#   - production :      https://jeangarf.github.io/git-graph-web/
+#   - pré-production :  https://jeangarf.github.io/git-graph-web/preprod/
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Préparer le dossier à publier
+        run: |
+          mkdir site
+          cp index.html manifest.webmanifest sw.js icon.svg icon-192.png icon-512.png site/
+
+      - name: Déployer 🚀
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: site # Le dossier que l'action doit publier.
+          branch: gh-pages # La branche que l'action doit alimenter.
+          target-folder: preprod # Publier dans /preprod/, à côté de la production.
+          clean: false # ne pas toucher à ce qui existe déjà (dont les fichiers de production)
