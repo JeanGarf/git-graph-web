@@ -137,10 +137,36 @@ if (res.ok) {
 ## Git branch
 
 - **main** : c'est la branche correspondant au déploiement en production (GitHub Pages).
-- **feature/xxx** : une branche de feature. Part de `main` et sera mergée dedans une fois terminée.
+- **develop** : la branche correspondant à la pré-production. On y merge les features considérées
+  comme fonctionnelles (la feature peut ne pas être terminée, mais on considère qu'on est arrivé à
+  un jalon qui fonctionne et qui mérite d'être versé sur `develop`).
+- **feature/xxx** : une branche de feature. Part de `main` ou `develop` et sera mergée dans `develop`.
 - Les sessions Claude Code sur le web travaillent sur des branches dédiées (ex.
   `claude/commit-git-graph-web-index-yza6qu`) : elles suivent les mêmes règles que les branches de
   feature ci-dessous.
+
+## Vocabulaire de propagation
+
+- **"Propager en pré-prod"** : merger une branche de feature dans `develop`, puis pusher `develop`.
+- **"Propager en prod"** : merger `develop` dans `main` (`main_jg` ou `master` selon le dépôt), puis
+  pusher `main`, puis revenir sur `develop`.
+
+## Corrections du CLAUDE.md
+
+Toute correction du `CLAUDE.md` doit **toujours** être faite dans la branche `feature/claude_md`,
+jamais directement dans `develop` ou dans une autre branche de feature. Contrairement aux branches
+`feature/xxx` habituelles, `feature/claude_md` est **permanente** : elle n'est jamais supprimée et
+sert à chaque future modification du fichier.
+
+Marche à suivre à chaque correction :
+1. Se placer sur `feature/claude_md`.
+2. Si `develop` a avancé depuis, merger `develop` dans `feature/claude_md` pour repartir d'une base
+   à jour.
+3. Faire la modification dans `feature/claude_md`, commiter.
+4. Propager en pré-prod : merger `feature/claude_md` dans `develop`, puis pusher `develop`.
+
+Le merge de `develop` dans `main` (propager en prod) se fait ultérieurement, séparément, une fois
+`develop` complétée et complètement validée — sans rien de spécifique au `CLAUDE.md`.
 
 ## Git commands
 
