@@ -151,6 +151,19 @@ if (res.ok) {
 - **"Propager en prod"** : merger `develop` dans `main` (`main_jg` ou `master` selon le dépôt), puis
   pusher `main`, puis revenir sur `develop`.
 
+## Flux de déploiement
+
+Même principe que sur `gephi-lite` : GitHub Pages sert la branche `gh-pages`, alimentée par deux
+workflows GitHub Actions (`.github/workflows/deploy-app.yml` et `deploy-app-preprod.yml`) qui
+copient les fichiers de la PWA à la racine (prod) ou dans `/preprod/` (pré-prod) de cette branche —
+sans étape de build ni sous-dossier de version, puisque ce dépôt est déjà la PWA statique.
+
+- **Pré-production** (branche `develop`, déployée sur `https://jeangarf.github.io/git-graph-web/preprod/`) :
+  se déclenche automatiquement à chaque push sur `develop`.
+- **Production** (branche `main`, déployée sur `https://jeangarf.github.io/git-graph-web/`) :
+  se déclenche automatiquement à chaque push sur `main` — donc seulement après un "propager en prod"
+  explicitement demandé.
+
 ## Corrections du CLAUDE.md
 
 Toute correction du `CLAUDE.md` doit **toujours** être faite dans la branche `feature/claude_md`,
