@@ -137,10 +137,19 @@ if (res.ok) {
 ## Git branch
 
 - **main** : c'est la branche correspondant au déploiement en production (GitHub Pages).
-- **feature/xxx** : une branche de feature. Part de `main` et sera mergée dedans une fois terminée.
+- **develop** : la branche correspondant à la pré-production. On y merge les features considérées
+  comme fonctionnelles (la feature peut ne pas être terminée, mais on considère qu'on est arrivé à
+  un jalon qui fonctionne et qui mérite d'être versé sur `develop`).
+- **feature/xxx** : une branche de feature. Part de `main` ou `develop` et sera mergée dans `develop`.
 - Les sessions Claude Code sur le web travaillent sur des branches dédiées (ex.
   `claude/commit-git-graph-web-index-yza6qu`) : elles suivent les mêmes règles que les branches de
   feature ci-dessous.
+
+## Vocabulaire de propagation
+
+- **"Propager en pré-prod"** : merger une branche de feature dans `develop`, puis pusher `develop`.
+- **"Propager en prod"** : merger `develop` dans `main` (`main_jg` ou `master` selon le dépôt), puis
+  pusher `main`, puis revenir sur `develop`.
 
 ## Git commands
 
