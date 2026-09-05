@@ -39,11 +39,32 @@ header{
 }
 .bar{display:flex;align-items:center;gap:8px;height:52px}
 .repo-field{
+  position:relative;
   flex:1; display:flex; align-items:center; gap:8px; min-width:0;
   background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:0 10px; height:38px;
 }
 .repo-field input{flex:1;min-width:0;background:none;border:0;outline:none;font-size:15px}
 .repo-field input::placeholder{color:var(--dim)}
+.chevron{flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:6px;color:var(--dim)}
+.chevron[hidden]{display:none}
+.chevron svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---------- liste des dépôts déjà ouverts ---------- */
+.recents{
+  position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:40;
+  background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:4px;
+  box-shadow:0 8px 24px rgba(0,0,0,.35); max-height:min(50vh,320px); overflow:auto;
+}
+.recents[hidden]{display:none}
+.recent{display:flex;align-items:center;gap:4px}
+.recent .pick{
+  flex:1; min-width:0; text-align:left; padding:9px 10px; border-radius:7px;
+  font-size:14px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.recent .owner{color:var(--dim)}
+.recent .forget{flex:none;width:28px;height:28px;border-radius:7px;color:var(--dim);font-size:17px;line-height:1}
+.recent .pick:hover,.recent .pick:focus-visible,
+.recent .forget:hover,.recent .forget:focus-visible{background:var(--panel2);outline:none}
 .icon-btn{
   position:relative;
   height:38px; min-width:38px; display:grid; place-items:center;
@@ -156,6 +177,11 @@ header{
     <div class="repo-field">
       <input id="repo" type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false"
              placeholder="proprietaire/depot" aria-label="Dépôt GitHub">
+      <button class="chevron" id="toggle-recents" type="button" hidden
+              aria-label="Dépôts déjà ouverts" title="Dépôts déjà ouverts">
+        <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg>
+      </button>
+      <div class="recents" id="recents" hidden></div>
     </div>
     <button class="icon-btn" id="load" aria-label="Ouvrir" title="Ouvrir">
       <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.4-6.4L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.4 6.4L3 16"/><path d="M3 21v-5h5"/></svg>
@@ -229,6 +255,9 @@ const ROW = 54, PAD = 13, DOT = 4.6, MAX_GUTTER = 132, LANE_MAX = 18, LANE_MIN =
 const COLORS = ['#c02000','#ff8a01','#ddcd5d','#88b046','#1765a0','#5757ff','#8057ff','#8000c0'];
 const color = i => COLORS[i % COLORS.length];
 
+/* ===================== autres réglages ===================== */
+const MAX_RECENTS = 12;                 // dépôts retenus dans la liste de reprise
+
 /* ===================== état ===================== */
 const S = {
   owner:'', repo:'', token:'', depth:100,
@@ -291,6 +320,102 @@ async function pool(items, width, fn){
 }
 
 /* ===================== chargement ===================== */
+
+//
+// Liste de reprise : les dépôts déjà ouverts, du plus récent au plus ancien
+//
+// Elle vit dans le stockage local, sans jamais interroger l'API : un jeton fine-grained étant
+// rattaché à un seul propriétaire, aucun appel ne saurait lister d'un coup des dépôts de comptes
+// différents. La liste, elle, mélange les propriétaires sans difficulté puisqu'elle retient des
+// noms complets « proprietaire/depot ».
+//
+
+function readRecents(){
+  let list;
+
+  try{ list = JSON.parse(LS.get('recents', '[]')); }
+  catch(e){ list = []; }
+
+  return Array.isArray(list) ? list : [];
+}
+
+// Remet le dépôt en tête, sans doublon, et oublie les plus anciens au-delà de MAX_RECENTS.
+function pushRecent(fullName){
+  const list = readRecents().filter(name => name !== fullName);
+  list.unshift(fullName);
+  LS.set('recents', JSON.stringify(list.slice(0, MAX_RECENTS)));
+  updateRecentsToggle();
+}
+
+function forgetRecent(fullName){
+  LS.set('recents', JSON.stringify(readRecents().filter(name => name !== fullName)));
+  updateRecentsToggle();
+}
+
+// Le chevron n'apparaît que s'il y a quelque chose à proposer
+function updateRecentsToggle(){
+  $('#toggle-recents').hidden = readRecents().length === 0;
+}
+
+function hideRecents(){
+  $('#recents').hidden = true;
+}
+
+// Affiche les dépôts retenus dont le nom contient `filtre` : le panneau sert donc aussi bien à
+// reprendre un dépôt d'un clic (filtre vide) qu'à compléter une saisie commencée.
+function renderRecents(filtre){
+  const box = $('#recents'), terme = filtre.toLowerCase();
+  const liste = readRecents().filter(nom => nom.toLowerCase().includes(terme));
+
+  box.textContent = '';
+
+  liste.forEach(nom => {
+
+    // Chaque ligne propose le dépôt à gauche, et son oubli à droite
+
+    const ligne = document.createElement('div');
+    ligne.className = 'recent';
+    ligne.append(makeRecentPick(nom), makeRecentForget(nom, filtre));
+    box.appendChild(ligne);
+  });
+
+  box.hidden = !liste.length;
+}
+
+// Le bouton qui charge le dépôt : le propriétaire est grisé pour que le nom du dépôt ressorte.
+function makeRecentPick(nom){
+  const btn = document.createElement('button');
+  const coupe = nom.indexOf('/');
+  const proprio = document.createElement('span');
+
+  btn.className = 'pick';
+  btn.type = 'button';
+  proprio.className = 'owner';
+  proprio.textContent = nom.slice(0, coupe + 1);
+  btn.append(proprio, document.createTextNode(nom.slice(coupe + 1)));
+
+  btn.onclick = () => {
+    $('#repo').value = nom;
+    hideRecents();
+    S.depth = 100;
+    loadRepo();
+  };
+
+  return btn;
+}
+
+// Le bouton qui retire le dépôt de la liste, pour les saisies devenues inutiles.
+function makeRecentForget(nom, filtre){
+  const btn = document.createElement('button');
+
+  btn.className = 'forget';
+  btn.type = 'button';
+  btn.textContent = '×';
+  btn.setAttribute('aria-label', 'Oublier ' + nom);
+  btn.onclick = () => { forgetRecent(nom); renderRecents(filtre); };
+
+  return btn;
+}
 
 //
 // Mémorisation du dépôt courant : l'URL porte le dépôt de CET onglet, le stockage local celui du
@@ -401,6 +526,10 @@ async function loadRepo({keepBranches=false} = {}){
     S.refs = refs;
     S.order = topoOrder(commits);
     draw();
+
+    // Le dépôt s'est chargé pour de bon : il rejoint la liste de reprise
+    pushRecent(S.owner + '/' + S.repo);
+
     setStatus(`${S.order.length} commits sur ${chosen.length} branche${chosen.length>1?'s':''}`);
     setTimeout(()=>setStatus(null), 2600);
   } catch(err){
@@ -674,8 +803,56 @@ function setStatus(msg, isError){
 }
 
 /* ===================== branchements ===================== */
-$('#load').onclick = () => { S.depth = 100; loadRepo(); };
-$('#repo').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); S.depth = 100; loadRepo(); } });
+$('#load').onclick = () => { S.depth = 100; hideRecents(); loadRepo(); };
+$('#repo').addEventListener('keydown', e => {
+
+  if (e.key === 'Enter'){
+    // La touche Entrée demande le chargement du dépôt saisi
+
+    // On referme la liste et on charge
+
+    e.preventDefault();
+    hideRecents();
+    S.depth = 100;
+    loadRepo();
+
+  } else if (e.key === 'Escape'){
+    // La touche Échap demande l'abandon de la liste
+
+    // On referme la liste sans rien charger
+    hideRecents();
+
+  } else {
+    // Toute autre touche participe à la saisie
+
+    // L'évènement « input » se chargera de filtrer la liste
+  }
+});
+
+// Prendre le champ montre tout ce qui est retenu ; taper dedans restreint à ce qui correspond
+
+$('#repo').addEventListener('focus', () => renderRecents(''));
+$('#repo').addEventListener('click', () => renderRecents(''));
+$('#repo').addEventListener('input', () => renderRecents($('#repo').value.trim()));
+
+$('#toggle-recents').onclick = () => {
+
+  if ($('#recents').hidden){
+    // La liste est fermée
+
+    // On l'ouvre en entier, sans tenir compte de ce qui est déjà saisi
+    renderRecents('');
+
+  } else {
+    // La liste est ouverte
+
+    // On la referme
+    hideRecents();
+  }
+};
+
+// Un clic hors du champ referme la liste
+document.addEventListener('click', e => { if (!e.target.closest('.repo-field')) hideRecents(); });
 $('#more').onclick = () => { S.depth += 100; loadRepo({keepBranches:true}); };
 $('#toggle-token').onclick = () => openDrawer('token');
 $('#toggle-branches').onclick = () => openDrawer('branches');
@@ -711,6 +888,9 @@ $('#preprod-banner').hidden = !location.pathname.includes('/preprod/');
 
 S.token = LS.get('token', '') || '';
 $('#token').value = S.token;
+
+// Le chevron de la liste de reprise n'a de sens que si des dépôts ont déjà été ouverts
+updateRecentsToggle();
 const params = new URLSearchParams(location.search);
 const start = params.get('repo') || LS.get('repo', '');
 if (start){ $('#repo').value = start; loadRepo(); }
