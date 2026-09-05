@@ -74,6 +74,16 @@ l'historique. Le panneau de filtrage reprend cette même couleur pour chaque chi
 occupé par la tête de la branche dans le graphe déjà dessiné. Une branche pas encore chargée, ou
 décochée, reste donc neutre : il n'y a encore rien à accorder.
 
+## Localiser une branche dans l'historique
+
+Chaque chip du panneau de filtrage porte un second bouton, un viseur : il referme le panneau et
+fait défiler l'historique jusqu'à la tête de cette branche, brièvement surlignée pour la repérer.
+Il ne s'agit pas du même clic que celui qui coche ou décoche la branche — les deux zones du chip
+sont indépendantes.
+
+Le viseur reste grisé tant que la branche n'a pas de couloir, c'est-à-dire tant qu'elle n'est pas
+encore dessinée dans le graphe : rien à atteindre pour une branche décochée ou pas encore chargée.
+
 ## Comment le graphe est construit
 
 Trois étapes, toutes côté navigateur.
