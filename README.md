@@ -35,6 +35,18 @@ script tiers n'est chargé, et rien n'est envoyé ailleurs que vers `api.github.
 *fine-grained* limité à la lecture du contenu ne peut rien casser s'il fuite : révoquez-le et
 c'est fini. Évitez malgré tout un jeton classique à portée `repo`, qui donne l'écriture.
 
+## Reprendre un dépôt sans le saisir
+
+Tout dépôt qui s'ouvre sans erreur entre dans une liste de reprise, du plus récent au plus ancien
+(douze au maximum, réglable par `MAX_RECENTS`). Le chevron du champ de saisie ouvre cette liste :
+un clic sur une ligne recharge le dépôt, la croix l'en retire. Taper dans le champ restreint la
+liste à ce qui correspond.
+
+Elle vit dans le stockage local et ne coûte aucune requête. C'est aussi le seul moyen simple de
+mélanger des dépôts de **comptes GitHub différents** : un jeton *fine-grained* est rattaché à un
+seul propriétaire, donc aucun appel d'API ne saurait lister d'un coup les dépôts de plusieurs
+comptes. La liste, elle, retient des noms complets `proprietaire/depot` et s'en moque.
+
 Raccourci pratique : `https://…/couloirs/?repo=proprietaire/depot` ouvre directement un dépôt,
 ce qui fait un bon marque-page par projet. L'application inscrit d'elle-même le dépôt affiché dans
 l'URL de l'onglet : chaque onglet garde donc son propre dépôt, et un rafraîchissement rejoue bien
