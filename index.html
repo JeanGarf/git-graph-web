@@ -88,6 +88,8 @@ header{
 
 /* ---------- statut ---------- */
 .status{padding:10px 14px;font-size:13px;color:var(--dim);display:flex;gap:8px;align-items:center}
+/* Sans cela, le display:flex ci-dessus l'emporte sur l'attribut hidden et laisse une bande vide */
+.status[hidden]{display:none}
 .status.error{color:var(--danger)}
 .spinner{width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:99px;animation:spin .7s linear infinite;flex:none}
 @keyframes spin{to{transform:rotate(1turn)}}
