@@ -36,7 +36,9 @@ script tiers n'est chargé, et rien n'est envoyé ailleurs que vers `api.github.
 c'est fini. Évitez malgré tout un jeton classique à portée `repo`, qui donne l'écriture.
 
 Raccourci pratique : `https://…/couloirs/?repo=proprietaire/depot` ouvre directement un dépôt,
-ce qui fait un bon marque-page par projet.
+ce qui fait un bon marque-page par projet. L'application inscrit d'elle-même le dépôt affiché dans
+l'URL de l'onglet : chaque onglet garde donc son propre dépôt, et un rafraîchissement rejoue bien
+celui-là. Le jeton, lui, est partagé par tous les onglets du navigateur.
 
 ## Comment le graphe est construit
 
