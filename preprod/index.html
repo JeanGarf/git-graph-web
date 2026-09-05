@@ -165,7 +165,7 @@ header{
        Créez un jeton <em>fine-grained</em> avec la seule permission <strong>Contents : Read-only</strong> sur les dépôts voulus.
        Il reste dans le stockage local de ce navigateur et ne part que vers api.github.com.</p>
     <div class="token-row">
-      <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_… ou ghp_…" aria-label="Jeton">
+      <input id="token" type="password" autocomplete="new-password" spellcheck="false" placeholder="github_pat_… ou ghp_…" aria-label="Jeton">
       <button class="btn primary" id="save-token">Enregistrer</button>
     </div>
     <div class="drawer-actions" style="margin-top:10px">
@@ -255,9 +255,9 @@ function humanError(res, body){
   if (res.status === 403 && left === '0')
     return S.token ? "Quota d'API épuisé. Réessayez dans une heure."
                    : "Quota anonyme épuisé (60 requêtes/h). Ajoutez un jeton avec la clé.";
-  if (res.status === 403) return "Accès refusé : le jeton ne couvre pas ce dépôt.";
+  if (res.status === 403) return "Accès refusé : ce dépôt n'est pas dans la sélection du jeton.";
   if (res.status === 404)
-    return S.token ? "Dépôt introuvable, ou le jeton n'a pas la permission Contents sur ce dépôt."
+    return S.token ? "Dépôt introuvable. Vérifiez le nom, ou ajoutez-le à la sélection du jeton."
                    : "Dépôt introuvable. S'il est privé, ajoutez un jeton avec la clé.";
   if (res.status === 409) return "Ce dépôt n'a aucun commit.";
   return (body && body.message) ? body.message : ("Erreur " + res.status);
@@ -282,6 +282,38 @@ async function pool(items, width, fn){
 }
 
 /* ===================== chargement ===================== */
+
+//
+// Mémorisation du dépôt courant : l'URL porte le dépôt de CET onglet, le stockage local celui du
+// dernier onglet en date
+//
+// Deux onglets peuvent ainsi suivre deux dépôts différents, et un rafraîchissement rejoue bien
+// celui de l'onglet. Le stockage local, commun à tous les onglets, ne sert plus qu'à proposer le
+// dernier dépôt ouvert à un onglet arrivé sans paramètre.
+//
+
+function rememberRepo(fullName){
+
+  // On réécrit l'URL de l'onglet, sans recharger la page ni empiler d'entrée d'historique
+
+  try{
+    const url = new URL(location.href);
+    url.searchParams.set('repo', fullName);
+    history.replaceState(null, '', url);
+  }catch(e){ /* URL non réinscriptible : le stockage local prendra le relais */ }
+
+  // Le dernier dépôt ouvert servira de proposition aux prochains onglets
+  LS.set('repo', fullName);
+}
+
+// Le tiroir du jeton ne doit s'ouvrir que s'il peut débloquer la situation : sans jeton, en ajouter
+// un peut suffire ; avec un jeton, seul un refus franc (401) le met en cause — un 403 ou un 404
+// désigne le dépôt demandé, pas la clé, qui reste valable pour les autres dépôts.
+function needsToken(err){
+  const denied = err.status === 401 || err.status === 403 || err.status === 404;
+  return err.status === 401 || (denied && !S.token);
+}
+
 async function loadRepo({keepBranches=false} = {}){
   if (S.busy) return;
   const raw = $('#repo').value.trim()
@@ -289,7 +321,9 @@ async function loadRepo({keepBranches=false} = {}){
   const m = raw.match(/^([\w.-]+)\/([\w.-]+)/);
   if (!m){ setStatus("Format attendu : proprietaire/depot", true); return; }
   S.owner = m[1]; S.repo = m[2];
-  LS.set('repo', S.owner + '/' + S.repo);
+
+  // Cet onglet suit désormais ce dépôt : on le note dans son URL
+  rememberRepo(S.owner + '/' + S.repo);
 
   // Le titre de la page reflète le dépôt saisi
   document.title = `${S.owner}/${S.repo} -- git-graph-web`;
@@ -361,8 +395,12 @@ async function loadRepo({keepBranches=false} = {}){
     setStatus(`${S.order.length} commits sur ${chosen.length} branche${chosen.length>1?'s':''}`);
     setTimeout(()=>setStatus(null), 2600);
   } catch(err){
+
+    // Afficher l'erreur, et n'ouvrir le tiroir du jeton que s'il peut y remédier
+
     setStatus(err.message || String(err), true);
-    if (err.status === 401 || err.status === 403 || err.status === 404) openDrawer('token', true);
+    openDrawer('token', needsToken(err));
+
   } finally {
     S.busy = false;
   }
@@ -638,8 +676,12 @@ const params = new URLSearchParams(location.search);
 const start = params.get('repo') || LS.get('repo', '');
 if (start){ $('#repo').value = start; loadRepo(); }
 
+// On demande explicitement la vérification de mise à jour : sans elle, un navigateur qui a déjà
+// une version en cache peut resservir l'ancienne app pendant plusieurs chargements.
 if ('serviceWorker' in navigator)
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js')
+                                                 .then(reg => reg.update())
+                                                 .catch(()=>{}));
 </script>
 </body>
 </html>
