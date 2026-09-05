@@ -101,12 +101,16 @@ header{
 .token-row input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:9px 10px;outline:none;font-family:var(--mono);font-size:13px}
 .branches{display:flex;flex-wrap:wrap;gap:6px;max-height:38vh;overflow:auto;margin-bottom:10px}
 .chip{
-  display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:99px;
+  display:inline-flex;align-items:stretch;border-radius:99px;
   border:1px solid var(--line);background:var(--bg);font-size:13px;color:var(--dim);
 }
-.chip[aria-pressed="true"]{color:var(--text);border-color:currentColor}
+.chip[data-pressed="true"]{color:var(--text);border-color:currentColor}
 .chip .dot{width:8px;height:8px;border-radius:99px;background:currentColor;opacity:.55}
-.chip[aria-pressed="true"] .dot{opacity:1}
+.chip[data-pressed="true"] .dot{opacity:1}
+.chip-name{display:inline-flex;align-items:center;gap:6px;padding:6px 4px 6px 10px;color:inherit}
+.chip-locate{display:inline-flex;align-items:center;padding:6px 10px 6px 5px;color:inherit;opacity:.55}
+.chip-locate:disabled{opacity:.22}
+.chip-locate svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .drawer-actions{display:flex;gap:8px;flex-wrap:wrap}
 .btn{border:1px solid var(--line);border-radius:9px;padding:8px 12px;font-size:14px;background:var(--bg)}
 .btn.primary{background:var(--accent);color:#fff;border-color:transparent;font-weight:600}
@@ -129,6 +133,10 @@ header{
   justify-content:center; gap:2px; overflow:hidden; cursor:pointer;
 }
 .commit:active{background:var(--panel)}
+/* Bref surlignage du commit atteint depuis le panneau de filtrage */
+.commit.localise{animation:localise-flash 1.6s ease}
+@keyframes localise-flash{0%,100%{background:transparent}25%{background:var(--panel2)}}
+@media (prefers-reduced-motion:reduce){.commit.localise{animation:none;background:var(--panel2)}}
 .commit .title{
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:14.5px;
 }
@@ -918,27 +926,63 @@ function renderBranchPicker(){
   const list = $('#branch-list');
   list.textContent = '';
   S.branches.forEach((b) => {
-    const btn = document.createElement('button');
-    btn.className = 'chip';
-    btn.type = 'button';
+    const chip = document.createElement('span');
+    chip.className = 'chip';
     const selected = S.selected.has(b.name);
-    btn.setAttribute('aria-pressed', String(selected));
+    chip.dataset.pressed = String(selected);
 
     // Le couloir vient du graphe déjà dessiné, pour rester cohérent avec ses couleurs
     const lane = S.laneOf.get(b.commit.sha);
-    btn.style.color = (selected && lane != null) ? color(lane) : '';
+    chip.style.color = (selected && lane != null) ? color(lane) : '';
+
+    const nameBtn = document.createElement('button');
+    nameBtn.className = 'chip-name';
+    nameBtn.type = 'button';
+    nameBtn.setAttribute('aria-pressed', String(selected));
     const dot = document.createElement('span');
     dot.className = 'dot';
-    btn.append(dot, document.createTextNode(b.name));
-    btn.onclick = () => {
+    nameBtn.append(dot, document.createTextNode(b.name));
+    nameBtn.onclick = () => {
       S.selected.has(b.name) ? S.selected.delete(b.name) : S.selected.add(b.name);
       renderBranchPicker();
     };
-    list.appendChild(btn);
+
+    const locateBtn = document.createElement('button');
+    locateBtn.className = 'chip-locate';
+    locateBtn.type = 'button';
+    locateBtn.disabled = lane == null;
+    locateBtn.title = lane == null ? 'Branche pas encore chargée' : `Localiser ${b.name} dans l'historique`;
+    locateBtn.setAttribute('aria-label', locateBtn.title);
+    locateBtn.innerHTML = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/>'
+      + '<path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>';
+    locateBtn.onclick = () => locateBranch(b);
+
+    chip.append(nameBtn, locateBtn);
+    list.appendChild(chip);
   });
 
   // Le bouton du panneau reflète l'état du filtre
   updateBranchFilter();
+}
+
+//
+// Localisation d'une branche depuis le panneau de filtrage
+//
+// Le commit de tête n'est atteignable que s'il a déjà un couloir, donc déjà dessiné dans
+// l'historique : c'est pourquoi le bouton reste désactivé tant que la branche n'est pas chargée.
+//
+
+function locateBranch(b){
+  const li = document.querySelector(`#rows li[data-sha="${b.commit.sha}"]`);
+  if (!li) return;
+  openDrawer('branches', false);
+
+  // Le tiroir vient de se refermer : on attend le reflux avant de calculer la position à atteindre
+  requestAnimationFrame(() => {
+    li.scrollIntoView({ behavior:'smooth', block:'center' });
+    li.classList.add('localise');
+    setTimeout(() => li.classList.remove('localise'), 1600);
+  });
 }
 
 function setStatus(msg, isError){
