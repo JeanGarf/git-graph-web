@@ -261,7 +261,8 @@ const MAX_RECENTS = 12;                 // dépôts retenus dans la liste de rep
 /* ===================== état ===================== */
 const S = {
   owner:'', repo:'', token:'', depth:100,
-  branches:[], selected:new Set(), refs:new Map(), commits:new Map(), order:[], busy:false
+  branches:[], selected:new Set(), refs:new Map(), commits:new Map(), order:[], busy:false,
+  statusTimer:null
 };
 const $ = s => document.querySelector(s);
 // Les attributs de présentation SVG n'acceptent pas var() partout : on lit la couleur réelle.
@@ -531,7 +532,7 @@ async function loadRepo({keepBranches=false} = {}){
     pushRecent(S.owner + '/' + S.repo);
 
     setStatus(`${S.order.length} commits sur ${chosen.length} branche${chosen.length>1?'s':''}`);
-    setTimeout(()=>setStatus(null), 2600);
+    S.statusTimer = setTimeout(()=>setStatus(null), 2600);
   } catch(err){
 
     // Afficher l'erreur, et n'ouvrir le tiroir du jeton que s'il peut y remédier
@@ -790,6 +791,13 @@ function renderBranchPicker(){
 
 function setStatus(msg, isError){
   const el = $('#status');
+
+  // Un nouveau statut annule l'effacement automatique du précédent, sinon celui-ci pourrait
+  // effacer ce message-ci après coup
+
+  clearTimeout(S.statusTimer);
+  S.statusTimer = null;
+
   el.hidden = !msg;
   el.className = 'status' + (isError ? ' error' : '');
   el.textContent = '';
