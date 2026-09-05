@@ -45,13 +45,18 @@ header{
 .repo-field input{flex:1;min-width:0;background:none;border:0;outline:none;font-size:15px}
 .repo-field input::placeholder{color:var(--dim)}
 .icon-btn{
+  position:relative;
   height:38px; min-width:38px; display:grid; place-items:center;
   border:1px solid var(--line); border-radius:9px; background:var(--panel); color:var(--dim);
+}
+/* Pastille du bouton de filtrage : allumée dès qu'une branche est masquée */
+#toggle-branches[data-filtered]::after{
+  content:''; position:absolute; top:-3px; right:-3px; width:9px; height:9px;
+  border-radius:99px; background:var(--accent); box-shadow:0 0 0 2px var(--bg);
 }
 .icon-btn:focus-visible,.repo-field:focus-within{outline:2px solid var(--accent);outline-offset:1px}
 .icon-btn[aria-pressed="true"]{color:var(--accent);border-color:var(--accent)}
 .icon-btn svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.go{background:var(--accent);color:#fff;border-color:transparent;padding:0 14px;font-weight:600}
 
 /* ---------- bandeau pré-production ---------- */
 .preprod-banner{
@@ -83,6 +88,8 @@ header{
 
 /* ---------- statut ---------- */
 .status{padding:10px 14px;font-size:13px;color:var(--dim);display:flex;gap:8px;align-items:center}
+/* Sans cela, le display:flex ci-dessus l'emporte sur l'attribut hidden et laisse une bande vide */
+.status[hidden]{display:none}
 .status.error{color:var(--danger)}
 .spinner{width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:99px;animation:spin .7s linear infinite;flex:none}
 @keyframes spin{to{transform:rotate(1turn)}}
@@ -150,9 +157,11 @@ header{
       <input id="repo" type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false"
              placeholder="proprietaire/depot" aria-label="Dépôt GitHub">
     </div>
-    <button class="icon-btn go" id="load">Ouvrir</button>
-    <button class="icon-btn" id="toggle-branches" aria-pressed="false" aria-label="Choisir les branches" title="Branches">
-      <svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 8.5v7M8.5 6h5a4 4 0 0 1 4 4v.5"/></svg>
+    <button class="icon-btn" id="load" aria-label="Ouvrir" title="Ouvrir">
+      <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.4-6.4L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.4 6.4L3 16"/><path d="M3 21v-5h5"/></svg>
+    </button>
+    <button class="icon-btn" id="toggle-branches" aria-pressed="false" aria-label="Filtrer les branches" title="Filtrer les branches">
+      <svg viewBox="0 0 24 24"><path d="M21 4H3l7.2 8.5V19l3.6 1.8v-8.3L21 4z"/></svg>
     </button>
     <button class="icon-btn" id="toggle-token" aria-pressed="false" aria-label="Jeton d'accès" title="Jeton">
       <svg viewBox="0 0 24 24"><circle cx="8" cy="12" r="3.2"/><path d="M11.2 12H21m-3 0v3m-3-3v2.2"/></svg>
@@ -165,7 +174,7 @@ header{
        Créez un jeton <em>fine-grained</em> avec la seule permission <strong>Contents : Read-only</strong> sur les dépôts voulus.
        Il reste dans le stockage local de ce navigateur et ne part que vers api.github.com.</p>
     <div class="token-row">
-      <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_… ou ghp_…" aria-label="Jeton">
+      <input id="token" type="password" autocomplete="new-password" spellcheck="false" placeholder="github_pat_… ou ghp_…" aria-label="Jeton">
       <button class="btn primary" id="save-token">Enregistrer</button>
     </div>
     <div class="drawer-actions" style="margin-top:10px">
@@ -255,9 +264,9 @@ function humanError(res, body){
   if (res.status === 403 && left === '0')
     return S.token ? "Quota d'API épuisé. Réessayez dans une heure."
                    : "Quota anonyme épuisé (60 requêtes/h). Ajoutez un jeton avec la clé.";
-  if (res.status === 403) return "Accès refusé : le jeton ne couvre pas ce dépôt.";
+  if (res.status === 403) return "Accès refusé : ce dépôt n'est pas dans la sélection du jeton.";
   if (res.status === 404)
-    return S.token ? "Dépôt introuvable, ou le jeton n'a pas la permission Contents sur ce dépôt."
+    return S.token ? "Dépôt introuvable. Vérifiez le nom, ou ajoutez-le à la sélection du jeton."
                    : "Dépôt introuvable. S'il est privé, ajoutez un jeton avec la clé.";
   if (res.status === 409) return "Ce dépôt n'a aucun commit.";
   return (body && body.message) ? body.message : ("Erreur " + res.status);
@@ -282,6 +291,38 @@ async function pool(items, width, fn){
 }
 
 /* ===================== chargement ===================== */
+
+//
+// Mémorisation du dépôt courant : l'URL porte le dépôt de CET onglet, le stockage local celui du
+// dernier onglet en date
+//
+// Deux onglets peuvent ainsi suivre deux dépôts différents, et un rafraîchissement rejoue bien
+// celui de l'onglet. Le stockage local, commun à tous les onglets, ne sert plus qu'à proposer le
+// dernier dépôt ouvert à un onglet arrivé sans paramètre.
+//
+
+function rememberRepo(fullName){
+
+  // On réécrit l'URL de l'onglet, sans recharger la page ni empiler d'entrée d'historique
+
+  try{
+    const url = new URL(location.href);
+    url.searchParams.set('repo', fullName);
+    history.replaceState(null, '', url);
+  }catch(e){ /* URL non réinscriptible : le stockage local prendra le relais */ }
+
+  // Le dernier dépôt ouvert servira de proposition aux prochains onglets
+  LS.set('repo', fullName);
+}
+
+// Le tiroir du jeton ne doit s'ouvrir que s'il peut débloquer la situation : sans jeton, en ajouter
+// un peut suffire ; avec un jeton, seul un refus franc (401) le met en cause — un 403 ou un 404
+// désigne le dépôt demandé, pas la clé, qui reste valable pour les autres dépôts.
+function needsToken(err){
+  const denied = err.status === 401 || err.status === 403 || err.status === 404;
+  return err.status === 401 || (denied && !S.token);
+}
+
 async function loadRepo({keepBranches=false} = {}){
   if (S.busy) return;
   const raw = $('#repo').value.trim()
@@ -289,7 +330,9 @@ async function loadRepo({keepBranches=false} = {}){
   const m = raw.match(/^([\w.-]+)\/([\w.-]+)/);
   if (!m){ setStatus("Format attendu : proprietaire/depot", true); return; }
   S.owner = m[1]; S.repo = m[2];
-  LS.set('repo', S.owner + '/' + S.repo);
+
+  // Cet onglet suit désormais ce dépôt : on le note dans son URL
+  rememberRepo(S.owner + '/' + S.repo);
 
   // Le titre de la page reflète le dépôt saisi
   document.title = `${S.owner}/${S.repo} -- git-graph-web`;
@@ -361,8 +404,12 @@ async function loadRepo({keepBranches=false} = {}){
     setStatus(`${S.order.length} commits sur ${chosen.length} branche${chosen.length>1?'s':''}`);
     setTimeout(()=>setStatus(null), 2600);
   } catch(err){
+
+    // Afficher l'erreur, et n'ouvrir le tiroir du jeton que s'il peut y remédier
+
     setStatus(err.message || String(err), true);
-    if (err.status === 401 || err.status === 403 || err.status === 404) openDrawer('token', true);
+    openDrawer('token', needsToken(err));
+
   } finally {
     S.busy = false;
   }
@@ -562,6 +609,33 @@ function openDrawer(which, force){
   if (open && which === 'token') $('#token').focus();
 }
 
+// Le bouton de filtrage porte une pastille dès qu'une branche est masquée, et son infobulle donne
+// le compte exact : sans cela, rien ne distingue « tout est affiché » de « 12 branches sur 47 »,
+// puisque l'app en masque déjà d'office au-delà des douze premières.
+function updateBranchFilter(){
+  const total = S.branches.length, shown = S.selected.size;
+  const btn = $('#toggle-branches');
+
+  if (shown < total){
+    // Une partie des branches du dépôt est masquée
+
+    // On allume la pastille et l'infobulle annonce le compte
+
+    btn.dataset.filtered = 'oui';
+    btn.title = `Filtrer les branches : ${shown} sur ${total} affichées`;
+
+  } else {
+    // Toutes les branches connues sont affichées OU aucun dépôt n'est encore chargé
+
+    // On éteint la pastille et l'infobulle redevient neutre
+
+    delete btn.dataset.filtered;
+    btn.title = "Filtrer les branches";
+  }
+
+  btn.setAttribute('aria-label', btn.title);
+}
+
 function renderBranchPicker(){
   const list = $('#branch-list');
   list.textContent = '';
@@ -580,6 +654,9 @@ function renderBranchPicker(){
     };
     list.appendChild(btn);
   });
+
+  // Le bouton du panneau reflète l'état du filtre
+  updateBranchFilter();
 }
 
 function setStatus(msg, isError){
@@ -638,8 +715,12 @@ const params = new URLSearchParams(location.search);
 const start = params.get('repo') || LS.get('repo', '');
 if (start){ $('#repo').value = start; loadRepo(); }
 
+// On demande explicitement la vérification de mise à jour : sans elle, un navigateur qui a déjà
+// une version en cache peut resservir l'ancienne app pendant plusieurs chargements.
 if ('serviceWorker' in navigator)
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js')
+                                                 .then(reg => reg.update())
+                                                 .catch(()=>{}));
 </script>
 </body>
 </html>
