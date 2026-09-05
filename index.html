@@ -272,7 +272,7 @@ const SHEET_CLOSE_PX = 90;              // glissement au-delà duquel la feuille
 const S = {
   owner:'', repo:'', token:'', depth:100,
   branches:[], selected:new Set(), refs:new Map(), commits:new Map(), order:[], busy:false,
-  statusTimer:null, sheetDrag:null, sheetBack:false
+  statusTimer:null, sheetDrag:null, sheetBack:false, laneOf:new Map()
 };
 const $ = s => document.querySelector(s);
 // Les attributs de présentation SVG n'acceptent pas var() partout : on lit la couleur réelle.
@@ -538,6 +538,10 @@ async function loadRepo({keepBranches=false} = {}){
     S.order = topoOrder(commits);
     draw();
 
+    // Les couloirs ne sont connus qu'une fois le graphe dessiné : le panneau de filtrage se
+    // recolore à son tour, sur ces couleurs-là plutôt que sur celles du chargement précédent
+    renderBranchPicker();
+
     // Le dépôt s'est chargé pour de bon : il rejoint la liste de reprise
     pushRecent(S.owner + '/' + S.repo);
 
@@ -622,9 +626,17 @@ function draw(){
   rowsEl.textContent = ''; svg.textContent = '';
   $('#empty').hidden = S.order.length > 0;
   $('#foot').hidden = S.order.length === 0;
-  if (!S.order.length){ svg.setAttribute('height', 0); return; }
+  if (!S.order.length){
+    // Sans commit, plus aucun couloir n'est attribué : les chips du panneau retombent en neutre
+    S.laneOf = new Map();
+    svg.setAttribute('height', 0);
+    return;
+  }
 
   const { col, row, edges, laneCount } = assignLanes(S.order, S.commits);
+
+  // Le panneau de filtrage colore ses chips d'après ce couloir, pour rester cohérent avec le graphe
+  S.laneOf = col;
   // La gouttière s'adapte au nombre de couloirs sans jamais les rogner :
   // les traits se resserrent d'abord, puis la colonne de texte cède du terrain.
   const budget = Math.min(MAX_GUTTER, Math.round(window.innerWidth * 0.45));
@@ -905,12 +917,16 @@ function updateBranchFilter(){
 function renderBranchPicker(){
   const list = $('#branch-list');
   list.textContent = '';
-  S.branches.forEach((b, i) => {
+  S.branches.forEach((b) => {
     const btn = document.createElement('button');
     btn.className = 'chip';
     btn.type = 'button';
-    btn.setAttribute('aria-pressed', String(S.selected.has(b.name)));
-    btn.style.color = S.selected.has(b.name) ? color(i) : '';
+    const selected = S.selected.has(b.name);
+    btn.setAttribute('aria-pressed', String(selected));
+
+    // Le couloir vient du graphe déjà dessiné, pour rester cohérent avec ses couleurs
+    const lane = S.laneOf.get(b.commit.sha);
+    btn.style.color = (selected && lane != null) ? color(lane) : '';
     const dot = document.createElement('span');
     dot.className = 'dot';
     btn.append(dot, document.createTextNode(b.name));
