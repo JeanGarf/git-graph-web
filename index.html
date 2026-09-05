@@ -23,9 +23,11 @@
          --text:#1b2432; --dim:#6a788c; --accent:#1f6feb; }
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-/* Seule la valeur de l'élément racine est propagée au viewport : posée sur le seul body, elle
-   n'empêchait pas le « tirer pour rafraîchir » d'Android de happer les glissements vers le bas. */
-html,body{margin:0;padding:0;overscroll-behavior-y:none}
+html,body{margin:0;padding:0}
+/* Le « tirer pour rafraîchir » d'Android reste disponible sur l'écran principal : il n'est
+   neutralisé que le temps d'une feuille ouverte, où le glissement vers le bas lui appartient.
+   La règle doit porter sur l'élément racine — la valeur de body n'est pas propagée au viewport. */
+html.feuille-ouverte{overscroll-behavior-y:none}
 body{
   background:var(--bg); color:var(--text); font-family:var(--sans);
   font-size:15px; line-height:1.35;
@@ -734,10 +736,11 @@ function openSheet(sha){
   add(c.parents.length > 1 ? 'Parents' : 'Parent', c.parents.map(p => p.slice(0,7)).join('  ') || '(commit racine)');
   $('#sheet-link').href = c.url;
 
-  // Afficher la feuille et son fond
+  // Afficher la feuille et son fond, et confisquer le « tirer pour rafraîchir » le temps du séjour
 
   $('#sheet').classList.add('open');
   $('#sheet-bg').classList.add('open');
+  document.documentElement.classList.add('feuille-ouverte');
 
   pushSheetHistory();
 }
@@ -770,10 +773,11 @@ function pushSheetHistory(){
 }
 
 function hideSheet(){
-  // Masquer la feuille et son fond
+  // Masquer la feuille et son fond, et rendre le « tirer pour rafraîchir » à l'écran principal
 
   $('#sheet').classList.remove('open');
   $('#sheet-bg').classList.remove('open');
+  document.documentElement.classList.remove('feuille-ouverte');
 }
 
 function closeSheet(){

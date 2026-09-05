@@ -60,9 +60,11 @@ un clic sur le fond assombri, ou la touche **Échap**.
 
 Pas de croix en haut à droite : Material réserve la croix aux boîtes de dialogue et recommande la
 poignée pour les feuilles du bas. Encore faut-il que la poignée tienne sa promesse — sinon le doigt
-glisse jusqu'au bord haut de l'écran et déclenche le « tirer pour rafraîchir ». Celui-ci est coupé
-par `overscroll-behavior-y` posé sur `html` : sur le seul `body`, la valeur n'est pas propagée au
-viewport et ne sert à rien.
+glisse jusqu'au bord haut de l'écran et déclenche le « tirer pour rafraîchir ».
+
+Ce dernier reste actif sur l'écran principal ; il n'est confisqué que le temps d'une feuille
+ouverte, par `overscroll-behavior-y` sur `html`. Sur le seul `body`, la valeur n'est pas propagée
+au viewport et ne servirait à rien.
 
 ## Comment le graphe est construit
 
