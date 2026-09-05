@@ -45,8 +45,14 @@ header{
 .repo-field input{flex:1;min-width:0;background:none;border:0;outline:none;font-size:15px}
 .repo-field input::placeholder{color:var(--dim)}
 .icon-btn{
+  position:relative;
   height:38px; min-width:38px; display:grid; place-items:center;
   border:1px solid var(--line); border-radius:9px; background:var(--panel); color:var(--dim);
+}
+/* Pastille du bouton de filtrage : allumée dès qu'une branche est masquée */
+#toggle-branches[data-filtered]::after{
+  content:''; position:absolute; top:-3px; right:-3px; width:9px; height:9px;
+  border-radius:99px; background:var(--accent); box-shadow:0 0 0 2px var(--bg);
 }
 .icon-btn:focus-visible,.repo-field:focus-within{outline:2px solid var(--accent);outline-offset:1px}
 .icon-btn[aria-pressed="true"]{color:var(--accent);border-color:var(--accent)}
@@ -152,8 +158,8 @@ header{
     <button class="icon-btn" id="load" aria-label="Ouvrir" title="Ouvrir">
       <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.4-6.4L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.4 6.4L3 16"/><path d="M3 21v-5h5"/></svg>
     </button>
-    <button class="icon-btn" id="toggle-branches" aria-pressed="false" aria-label="Choisir les branches" title="Branches">
-      <svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 8.5v7M8.5 6h5a4 4 0 0 1 4 4v.5"/></svg>
+    <button class="icon-btn" id="toggle-branches" aria-pressed="false" aria-label="Filtrer les branches" title="Filtrer les branches">
+      <svg viewBox="0 0 24 24"><path d="M21 4H3l7.2 8.5V19l3.6 1.8v-8.3L21 4z"/></svg>
     </button>
     <button class="icon-btn" id="toggle-token" aria-pressed="false" aria-label="Jeton d'accès" title="Jeton">
       <svg viewBox="0 0 24 24"><circle cx="8" cy="12" r="3.2"/><path d="M11.2 12H21m-3 0v3m-3-3v2.2"/></svg>
@@ -601,6 +607,33 @@ function openDrawer(which, force){
   if (open && which === 'token') $('#token').focus();
 }
 
+// Le bouton de filtrage porte une pastille dès qu'une branche est masquée, et son infobulle donne
+// le compte exact : sans cela, rien ne distingue « tout est affiché » de « 12 branches sur 47 »,
+// puisque l'app en masque déjà d'office au-delà des douze premières.
+function updateBranchFilter(){
+  const total = S.branches.length, shown = S.selected.size;
+  const btn = $('#toggle-branches');
+
+  if (shown < total){
+    // Une partie des branches du dépôt est masquée
+
+    // On allume la pastille et l'infobulle annonce le compte
+
+    btn.dataset.filtered = 'oui';
+    btn.title = `Filtrer les branches : ${shown} sur ${total} affichées`;
+
+  } else {
+    // Toutes les branches connues sont affichées OU aucun dépôt n'est encore chargé
+
+    // On éteint la pastille et l'infobulle redevient neutre
+
+    delete btn.dataset.filtered;
+    btn.title = "Filtrer les branches";
+  }
+
+  btn.setAttribute('aria-label', btn.title);
+}
+
 function renderBranchPicker(){
   const list = $('#branch-list');
   list.textContent = '';
@@ -619,6 +652,9 @@ function renderBranchPicker(){
     };
     list.appendChild(btn);
   });
+
+  // Le bouton du panneau reflète l'état du filtre
+  updateBranchFilter();
 }
 
 function setStatus(msg, isError){
