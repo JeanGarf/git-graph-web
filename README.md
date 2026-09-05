@@ -66,6 +66,14 @@ Ce dernier reste actif sur l'écran principal ; il n'est confisqué que le temps
 ouverte, par `overscroll-behavior-y` sur `html`. Sur le seul `body`, la valeur n'est pas propagée
 au viewport et ne servirait à rien.
 
+## Couleurs des branches
+
+Dans le graphe, la couleur d'un commit vient du **couloir** où il tombe, pas de la branche : les
+couloirs sont recyclés dès qu'ils se libèrent, une même colonne changeant de branche au fil de
+l'historique. Le panneau de filtrage reprend cette même couleur pour chaque chip, celle du couloir
+occupé par la tête de la branche dans le graphe déjà dessiné. Une branche pas encore chargée, ou
+décochée, reste donc neutre : il n'y a encore rien à accorder.
+
 ## Comment le graphe est construit
 
 Trois étapes, toutes côté navigateur.
