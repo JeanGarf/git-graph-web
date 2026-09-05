@@ -24,9 +24,13 @@
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
+/* Le « tirer pour rafraîchir » d'Android reste disponible sur l'écran principal : il n'est
+   neutralisé que le temps d'une feuille ouverte, où le glissement vers le bas lui appartient.
+   La règle doit porter sur l'élément racine — la valeur de body n'est pas propagée au viewport. */
+html.feuille-ouverte{overscroll-behavior-y:none}
 body{
   background:var(--bg); color:var(--text); font-family:var(--sans);
-  font-size:15px; line-height:1.35; overscroll-behavior-y:none;
+  font-size:15px; line-height:1.35;
   padding-bottom:env(safe-area-inset-bottom);
 }
 button,input{font:inherit;color:inherit}
@@ -155,11 +159,16 @@ header{
   border-top:1px solid var(--line); border-radius:16px 16px 0 0;
   padding:8px 16px calc(24px + env(safe-area-inset-bottom));
   transform:translateY(101%); transition:transform .2s cubic-bezier(.2,.7,.3,1);
-  max-height:80vh; overflow:auto;
+  max-height:80vh; overflow:auto; overscroll-behavior:contain;
 }
 .sheet.open{transform:none}
+/* Pendant le glissement, la feuille doit coller au doigt et non le rattraper en différé */
+.sheet.dragging{transition:none}
 @media (prefers-reduced-motion:reduce){.sheet{transition:none}}
-.grip{width:36px;height:4px;border-radius:9px;background:var(--line);margin:6px auto 14px}
+/* La zone de saisie déborde largement le trait dessiné, pour rester attrapable au pouce */
+.grip-zone{padding:8px 0 12px;margin:-6px -16px 2px;touch-action:none;cursor:grab}
+.grip-zone:active{cursor:grabbing}
+.grip{width:36px;height:4px;border-radius:9px;background:var(--line);margin:0 auto}
 .sheet pre{
   margin:0 0 14px; white-space:pre-wrap; word-break:break-word;
   font-family:var(--sans); font-size:15px; line-height:1.45;
@@ -241,7 +250,7 @@ header{
 
 <div class="sheet-bg" id="sheet-bg"></div>
 <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-label="Détail du commit">
-  <div class="grip"></div>
+  <div class="grip-zone" id="sheet-grip"><div class="grip"></div></div>
   <pre id="sheet-msg"></pre>
   <dl class="kv" id="sheet-kv"></dl>
   <a class="btn" id="sheet-link" target="_blank" rel="noopener">Ouvrir sur GitHub</a>
@@ -257,12 +266,13 @@ const color = i => COLORS[i % COLORS.length];
 
 /* ===================== autres réglages ===================== */
 const MAX_RECENTS = 12;                 // dépôts retenus dans la liste de reprise
+const SHEET_CLOSE_PX = 90;              // glissement au-delà duquel la feuille de détail se ferme
 
 /* ===================== état ===================== */
 const S = {
   owner:'', repo:'', token:'', depth:100,
   branches:[], selected:new Set(), refs:new Map(), commits:new Map(), order:[], busy:false,
-  statusTimer:null
+  statusTimer:null, sheetDrag:null, sheetBack:false
 };
 const $ = s => document.querySelector(s);
 // Les attributs de présentation SVG n'acceptent pas var() partout : on lit la couleur réelle.
@@ -725,10 +735,136 @@ function openSheet(sha){
   add('Date', new Date(c.date).toLocaleString('fr-FR'));
   add(c.parents.length > 1 ? 'Parents' : 'Parent', c.parents.map(p => p.slice(0,7)).join('  ') || '(commit racine)');
   $('#sheet-link').href = c.url;
+
+  // Afficher la feuille et son fond, et confisquer le « tirer pour rafraîchir » le temps du séjour
+
   $('#sheet').classList.add('open');
   $('#sheet-bg').classList.add('open');
+  document.documentElement.classList.add('feuille-ouverte');
+
+  pushSheetHistory();
 }
-function closeSheet(){ $('#sheet').classList.remove('open'); $('#sheet-bg').classList.remove('open'); }
+
+//
+// Fermeture de la feuille de détail
+//
+// Trois gestes la referment : le bouton Retour d'Android, un glissement vers le bas depuis la
+// poignée, et le clic sur le fond. Sans l'entrée d'historique, le Retour quitterait l'application
+// alors que l'utilisateur ne demandait qu'à sortir de la feuille.
+//
+
+function pushSheetHistory(){
+  if (!S.sheetBack){
+    // Aucune entrée d'historique ne représente encore la feuille ouverte
+
+    // En empiler une, en gardant l'URL courante (elle porte déjà le dépôt de l'onglet)
+
+    try{
+      history.pushState({ sheet:true }, '');
+      S.sheetBack = true;
+    }catch(e){
+      S.sheetBack = false;
+    }
+  } else {
+    // Une entrée représente déjà la feuille
+
+    // Ne pas en empiler une seconde, sinon il faudrait deux Retour pour sortir
+  }
+}
+
+function hideSheet(){
+  // Masquer la feuille et son fond, et rendre le « tirer pour rafraîchir » à l'écran principal
+
+  $('#sheet').classList.remove('open');
+  $('#sheet-bg').classList.remove('open');
+  document.documentElement.classList.remove('feuille-ouverte');
+}
+
+function closeSheet(){
+  if (S.sheetBack){
+    // Une entrée d'historique représente la feuille ouverte
+
+    // La dépiler, et laisser popstate procéder au masquage
+
+    S.sheetBack = false;
+    history.back();
+  } else {
+    // Aucune entrée d'historique à dépiler
+
+    // Masquer directement
+    hideSheet();
+  }
+}
+
+//
+// Glissement de la feuille vers le bas
+//
+// La poignée annonce un geste : si celui-ci n'existe pas, le doigt descend jusqu'au bord haut de
+// l'écran et déclenche le « tirer pour rafraîchir » d'Android.
+//
+
+function beginSheetDrag(e){
+  const sheet = $('#sheet');
+  if (e.target.closest('#sheet-grip') || sheet.scrollTop === 0){
+    // Le geste part de la poignée OU du haut d'un contenu qui n'a pas encore défilé
+
+    // Retenir le point de départ et suspendre la transition, la feuille suivra le doigt
+
+    S.sheetDrag = { id:e.pointerId, y0:e.clientY, dy:0 };
+    sheet.classList.add('dragging');
+    sheet.setPointerCapture(e.pointerId);
+  } else {
+    // Le geste part d'un contenu déjà défilé
+
+    // Le laisser au défilement de la feuille
+  }
+}
+
+function moveSheetDrag(e){
+  const drag = S.sheetDrag;
+  if (drag && e.pointerId === drag.id){
+    // Le doigt qui bouge est bien celui qui a saisi la feuille
+
+    // La feuille descend avec lui, mais ne remonte jamais au-dessus de sa position ouverte
+
+    drag.dy = Math.max(0, e.clientY - drag.y0);
+    $('#sheet').style.transform = `translateY(${drag.dy}px)`;
+  } else {
+    // Aucun glissement en cours OU un autre doigt sur l'écran
+
+    // Rien à suivre
+  }
+}
+
+function endSheetDrag(e){
+  const drag = S.sheetDrag;
+  if (drag && e.pointerId === drag.id){
+    // Le doigt qui tenait la feuille quitte l'écran, ou le navigateur reprend le geste
+
+    // Rendre la main à la transition avant de trancher entre fermeture et retour en place
+
+    const sheet = $('#sheet');
+    S.sheetDrag = null;
+    sheet.classList.remove('dragging');
+    sheet.style.transform = '';
+
+    if (e.type === 'pointerup' && drag.dy > SHEET_CLOSE_PX){
+      // Le geste s'est achevé au-delà de la distance de fermeture
+
+      // Refermer la feuille
+      closeSheet();
+
+    } else {
+      // Le geste est resté trop court OU le navigateur l'a interrompu
+
+      // Laisser la transition ramener la feuille à sa place
+    }
+  } else {
+    // Aucun glissement en cours OU un autre doigt
+
+    // Rien à conclure
+  }
+}
 
 /* ===================== panneaux ===================== */
 function openDrawer(which, force){
@@ -887,6 +1023,33 @@ $('#rows').addEventListener('keydown', e => {
 });
 $('#sheet-bg').onclick = closeSheet;
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
+
+// Glissement de la feuille : la capture du pointeur garantit de recevoir la fin du geste même si
+// le doigt sort de la feuille en chemin
+
+$('#sheet').addEventListener('pointerdown', beginSheetDrag);
+$('#sheet').addEventListener('pointermove', moveSheetDrag);
+$('#sheet').addEventListener('pointerup', endSheetDrag);
+$('#sheet').addEventListener('pointercancel', endSheetDrag);
+
+// Le bouton Retour d'Android dépile l'entrée posée à l'ouverture : il referme la feuille au lieu
+// de quitter l'application
+
+window.addEventListener('popstate', () => {
+  if ($('#sheet').classList.contains('open')){
+    // Le retour arrière survient alors que la feuille est ouverte
+
+    // Oublier l'entrée qui vient de disparaître, puis masquer
+
+    S.sheetBack = false;
+    hideSheet();
+
+  } else {
+    // La feuille est déjà fermée
+
+    // Laisser la navigation suivre son cours
+  }
+});
 window.addEventListener('resize', () => { if (S.order.length) draw(); });
 
 /* ===================== démarrage ===================== */
