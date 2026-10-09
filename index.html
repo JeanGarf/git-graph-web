@@ -14,7 +14,7 @@
 :root{
   --bg:#0e131c; --panel:#161d2a; --panel2:#1c2534; --line:#25303f;
   --text:#dbe3ee; --dim:#8a99ad; --accent:#5b9cf5; --danger:#e06c60;
-  --row:74px; --gutter:120px;
+  --row-gap:12px; --gutter:120px;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
   --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
 }
@@ -128,11 +128,11 @@ header{
 #graph{position:relative}
 #lanes{position:absolute;top:0;left:0;pointer-events:none}
 #rows{margin:0;padding:0;list-style:none;margin-left:var(--gutter)}
-/* Le contenu part du haut de la ligne plutôt que d'être centré : c'est ce qui permet à sa première
-   ligne (les références s'il y en a, sinon le titre) de tomber exactement sur la pastille du
-   graphe — voir FIRST_LINE en JS, qui fixe la hauteur de cette première ligne dans les deux cas. */
+/* Le contenu part du haut de la ligne, et sa première ligne (les références s'il y en a, sinon le
+   titre) tombe exactement sur la pastille du graphe — voir FIRST_LINE en JS. La hauteur suit le
+   contenu : sous la ligne de méta, un vide constant (--row-gap, réglé par ROW_GAP en JS). */
 .commit{
-  height:var(--row); padding:0 14px 0 4px; display:flex; flex-direction:column;
+  padding:0 14px var(--row-gap) 4px; display:flex; flex-direction:column;
   justify-content:flex-start; gap:2px; overflow:hidden; cursor:pointer;
 }
 .commit:active{background:var(--panel)}
@@ -141,8 +141,7 @@ header{
 @keyframes localise-flash{0%,100%{background:transparent}25%{background:var(--panel2)}}
 @media (prefers-reduced-motion:reduce){.commit.localise{animation:none;background:var(--panel2)}}
 /* Le titre s'étale sur trois lignes avant de tronquer (deux seulement si une ligne de références
-   la précède, pour garder le même total) plutôt qu'une seule : ROW (en JS) est dimensionné pour
-   ce total plus la ligne de méta ci-dessous. */
+   la précède, pour garder le même total) plutôt qu'une seule. */
 .commit .title{
   display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; line-clamp:3;
   overflow:hidden; font-size:14.5px; line-height:18px;
@@ -289,7 +288,7 @@ header{
 "use strict";
 
 /* ===================== réglages visuels ===================== */
-const ROW = 74, FIRST_LINE = 18, PAD = 13, DOT = 4.6, MAX_GUTTER = 132, LANE_MAX = 18, LANE_MIN = 11;
+const ROW_GAP = 12, FIRST_LINE = 18, PAD = 13, DOT = 4.6, MAX_GUTTER = 132, LANE_MAX = 18, LANE_MIN = 11;
 const COLORS = ['#c02000','#ff8a01','#ddcd5d','#88b046','#1765a0','#5757ff','#8057ff','#8000c0'];
 const color = i => COLORS[i % COLORS.length];
 
@@ -676,50 +675,18 @@ function draw(){
   const gutter = Math.ceil(PAD * 2 + (laneCount - 1) * lane);
   document.documentElement.style.setProperty('--gutter', gutter + 'px');
 
-  const X = c => PAD + c * lane;
+  document.documentElement.style.setProperty('--row-gap', ROW_GAP + 'px');
 
-  // La pastille s'aligne sur la première ligne du commit (références ou titre), pas sur le centre
-  // de toute la ligne : FIRST_LINE fixe la hauteur de cette première ligne, identique dans les deux cas
-  const Y = r => r * ROW + FIRST_LINE / 2;
-  const height = S.order.length * ROW;
-  svg.setAttribute('width', gutter);
-  svg.setAttribute('height', height);
-  svg.setAttribute('viewBox', `0 0 ${gutter} ${height}`);
+  //
+  // Lignes de texte
+  //
+  // Elles se construisent avant le graphe : leur hauteur dépend du nombre de lignes du titre, et
+  // le graphe se cale sur les hauteurs réelles plutôt que sur une hauteur fixe. Le vide sous la
+  // ligne de méta reste ainsi le même (ROW_GAP) quelle que soit la longueur du titre.
+  //
 
-  const ns = 'http://www.w3.org/2000/svg';
-  const frag = document.createDocumentFragment();
-  const node = (n, attrs) => { const e = document.createElementNS(ns, n);
-    for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
-
-  // arêtes d'abord, pastilles ensuite
-  for (const e of edges){
-    const r2 = row.get(e.to);
-    if (r2 == null) continue;
-    const x1 = X(e.c1), y1 = Y(e.r1), x2 = X(e.c2), y2 = Y(r2);
-    const d = (x1 === x2)
-      ? `M${x1} ${y1}V${y2}`
-      : `M${x1} ${y1}C${x1} ${y1 + ROW*.45} ${x2} ${y1 + ROW*.35} ${x2} ${y1 + ROW*.9}V${y2}`;
-    frag.appendChild(node('path', { d, fill:'none', stroke:color(e.c2), 'stroke-width':1.9,
-                                    'stroke-linecap':'round' }));
-  }
-
-  S.order.forEach((c, r) => {
-    const i = col.get(c.sha), x = X(i), y = Y(r), k = color(i);
-    if (c.truncated)
-      frag.appendChild(node('path', { d:`M${x} ${y}v${ROW*0.55}`, stroke:k, 'stroke-width':1.9,
-                                      'stroke-dasharray':'2 4', 'stroke-linecap':'round', fill:'none' }));
-    const tip = S.refs.has(c.sha);
-    if (tip) frag.appendChild(node('circle', { cx:x, cy:y, r:DOT + 3, fill:'none', stroke:k,
-                                               'stroke-width':1.6, opacity:.55 }));
-    frag.appendChild(node('circle', { cx:x, cy:y, r:DOT, fill:k }));
-    if (c.parents.length > 1)
-      frag.appendChild(node('circle', { cx:x, cy:y, r:DOT - 2, fill:bgColor() }));
-  });
-  svg.appendChild(frag);
-
-  // lignes de texte
   const rowsFrag = document.createDocumentFragment();
-  S.order.forEach((c, r) => {
+  S.order.forEach((c) => {
     const li = document.createElement('li');
     li.className = 'commit';
     li.dataset.sha = c.sha;
@@ -766,6 +733,60 @@ function draw(){
     rowsFrag.appendChild(li);
   });
   rowsEl.appendChild(rowsFrag);
+
+  //
+  // Mesure des lignes, puis graphe
+  //
+
+  // Les rectangles sont pris relativement au haut de la liste, donc indépendants du défilement
+  const rowsTop = rowsEl.getBoundingClientRect().top;
+  const rects = [...rowsEl.children].map(li => li.getBoundingClientRect());
+  const tops = rects.map(rc => rc.top - rowsTop);
+  const heights = rects.map(rc => rc.height);
+
+  const X = c => PAD + c * lane;
+
+  // La pastille s'aligne sur la première ligne du commit (références ou titre), pas sur le centre
+  // de toute la ligne : FIRST_LINE fixe la hauteur de cette première ligne, identique dans les deux cas
+  const Y = r => tops[r] + FIRST_LINE / 2;
+  const height = tops[tops.length - 1] + heights[heights.length - 1];
+  svg.setAttribute('width', gutter);
+  svg.setAttribute('height', height);
+  svg.setAttribute('viewBox', `0 0 ${gutter} ${height}`);
+
+  const ns = 'http://www.w3.org/2000/svg';
+  const frag = document.createDocumentFragment();
+  const node = (n, attrs) => { const e = document.createElementNS(ns, n);
+    for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+
+  // arêtes d'abord, pastilles ensuite
+  for (const e of edges){
+    const r2 = row.get(e.to);
+    if (r2 == null) continue;
+    const x1 = X(e.c1), y1 = Y(e.r1), x2 = X(e.c2), y2 = Y(r2);
+
+    // Le virage s'étale sur la hauteur de la ligne de départ
+    const step = heights[e.r1];
+    const d = (x1 === x2)
+      ? `M${x1} ${y1}V${y2}`
+      : `M${x1} ${y1}C${x1} ${y1 + step*.45} ${x2} ${y1 + step*.35} ${x2} ${y1 + step*.9}V${y2}`;
+    frag.appendChild(node('path', { d, fill:'none', stroke:color(e.c2), 'stroke-width':1.9,
+                                    'stroke-linecap':'round' }));
+  }
+
+  S.order.forEach((c, r) => {
+    const i = col.get(c.sha), x = X(i), y = Y(r), k = color(i);
+    if (c.truncated)
+      frag.appendChild(node('path', { d:`M${x} ${y}v${heights[r]*0.55}`, stroke:k, 'stroke-width':1.9,
+                                      'stroke-dasharray':'2 4', 'stroke-linecap':'round', fill:'none' }));
+    const tip = S.refs.has(c.sha);
+    if (tip) frag.appendChild(node('circle', { cx:x, cy:y, r:DOT + 3, fill:'none', stroke:k,
+                                               'stroke-width':1.6, opacity:.55 }));
+    frag.appendChild(node('circle', { cx:x, cy:y, r:DOT, fill:k }));
+    if (c.parents.length > 1)
+      frag.appendChild(node('circle', { cx:x, cy:y, r:DOT - 2, fill:bgColor() }));
+  });
+  svg.appendChild(frag);
 }
 
 function relDate(iso){

@@ -126,7 +126,7 @@ case, aucune arête traversante.
 En tête de `index.html` :
 
 ```js
-const ROW = 74;        // hauteur d'une ligne, en pixels
+const ROW_GAP = 12;    // vide sous la ligne de méta de chaque commit, en pixels
 const FIRST_LINE = 18; // hauteur de la première ligne (références ou titre), où tombe la pastille
 const PAD = 13;        // marge à gauche du premier couloir
 const DOT = 4.6;       // rayon des pastilles
@@ -134,11 +134,12 @@ const MAX_GUTTER = 132;// largeur maximale réservée au graphe
 const COLORS = [...];  // palette cyclique des couloirs
 ```
 
-`ROW` doit rester assez grand pour le total des lignes que permet le CSS (trois lignes de titre,
-ou deux plus une ligne de références, via `-webkit-line-clamp`) plus la ligne de méta : toutes les
-lignes ont la même hauteur, fixe, car le graphe positionne chaque pastille à `r * ROW + FIRST_LINE / 2`
-— pas au centre de la ligne, mais sur le milieu de sa première ligne, références comprises quand
-il y en a.
+La hauteur d'une ligne suit son contenu : le titre s'étale sur trois lignes au plus (deux plus une
+ligne de références quand il y en a, via `-webkit-line-clamp`), puis la ligne de méta, puis un vide
+constant `ROW_GAP` — quelle que soit la longueur du titre. Le graphe n'a donc pas de pas fixe :
+`draw()` construit d'abord les lignes, mesure leurs hauteurs réelles, puis place chaque pastille
+sur le milieu de la première ligne de son commit (`FIRST_LINE / 2` sous le haut de la ligne). Un
+redimensionnement refait ce calcul, puisque le texte se replie autrement.
 
 Les traits se resserrent quand les branches se multiplient, puis la colonne de texte cède du terrain.
 Au-delà d'une dizaine de branches simultanées, mieux vaut en décocher dans le sélecteur de branches.
