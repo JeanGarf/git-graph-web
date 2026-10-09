@@ -200,9 +200,12 @@ header{
 .copy{display:inline-flex;align-items:center;flex:none;padding:3px;border-radius:7px;color:var(--dim)}
 .copy svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .copy.copied{color:var(--accent)}
+/* Ligne des branches, au-dessus du message : même ordre que sur le graphe */
+.sheet-refs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.sheet-refs[hidden]{display:none}
 .branch-pill{
   display:inline-flex;align-items:center;gap:2px;padding:3px 3px 3px 9px;border-radius:99px;
-  border:1px solid currentColor;font-weight:600;
+  border:1px solid currentColor;font-family:var(--mono);font-size:12.5px;font-weight:600;
 }
 .sheet .btn{display:block;text-align:center;text-decoration:none;color:inherit}
 </style>
@@ -279,6 +282,7 @@ header{
 <div class="sheet-bg" id="sheet-bg"></div>
 <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-label="Détail du commit">
   <div class="grip-zone" id="sheet-grip"><div class="grip"></div></div>
+  <div class="sheet-refs" id="sheet-refs" hidden></div>
   <pre id="sheet-msg"></pre>
   <dl class="kv" id="sheet-kv"></dl>
   <a class="btn" id="sheet-link" target="_blank" rel="noopener">Ouvrir sur GitHub</a>
@@ -842,6 +846,37 @@ function makeCopyButton(text, label){
 function openSheet(sha){
   const c = S.commits.get(sha);
   if (!c) return;
+
+  // Les branches qui pointent sur ce commit ouvrent la feuille, au-dessus du message, dans le même
+  // ordre que sur le graphe
+  const refsEl = $('#sheet-refs');
+  const branches = (S.refs.get(sha) || []).filter(r => r.kind !== 'tag');
+  refsEl.textContent = '';
+  if (branches.length){
+    // Au moins une branche pointe directement sur ce commit
+
+    // Une pastille par branche, dans la couleur de son couloir, avec un bouton de copie chacune
+
+    const lane = S.laneOf.get(sha);
+    for (const b of branches){
+      const pill = document.createElement('span');
+      pill.className = 'branch-pill';
+      if (lane != null) pill.style.color = color(lane);
+      const name = document.createElement('span');
+      name.textContent = b.name;
+      pill.append(name, makeCopyButton(b.name, `Copier ${b.name}`));
+      refsEl.appendChild(pill);
+    }
+    refsEl.hidden = false;
+
+  } else {
+    // Aucune branche ne pointe directement sur ce commit
+
+    // Masquer la ligne, qui n'a pas lieu d'apparaître dans la feuille
+
+    refsEl.hidden = true;
+  }
+
   $('#sheet-msg').textContent = c.message || '(sans message)';
   const kv = $('#sheet-kv');
   kv.textContent = '';
@@ -858,32 +893,6 @@ function openSheet(sha){
   codeSha.textContent = c.sha.slice(0, 7);
   ddSha.append(codeSha, makeCopyButton(c.sha, "Copier l'empreinte complète"));
   kv.append(dtSha, ddSha);
-
-  const branches = (S.refs.get(sha) || []).filter(r => r.kind !== 'tag');
-  if (branches.length){
-    // Au moins une branche pointe directement sur ce commit
-
-    // Une pastille par branche, dans la couleur de son couloir, avec un bouton de copie chacune
-
-    const dt = document.createElement('dt'), dd = document.createElement('dd');
-    dt.textContent = branches.length > 1 ? 'Branches' : 'Branche';
-    const lane = S.laneOf.get(sha);
-    for (const b of branches){
-      const pill = document.createElement('span');
-      pill.className = 'branch-pill';
-      if (lane != null) pill.style.color = color(lane);
-      const name = document.createElement('span');
-      name.textContent = b.name;
-      pill.append(name, makeCopyButton(b.name, `Copier ${b.name}`));
-      dd.appendChild(pill);
-    }
-    kv.append(dt, dd);
-
-  } else {
-    // Aucune branche ne pointe directement sur ce commit
-
-    // Rien à ajouter : cette ligne n'a pas lieu d'apparaître dans la feuille
-  }
 
   add('Auteur', c.author);
   add('Date', new Date(c.date).toLocaleString('fr-FR'));
