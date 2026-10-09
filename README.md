@@ -84,6 +84,13 @@ sont indépendantes.
 Le viseur reste grisé tant que la branche n'a pas de couloir, c'est-à-dire tant qu'elle n'est pas
 encore dessinée dans le graphe : rien à atteindre pour une branche décochée ou pas encore chargée.
 
+## Détail d'un commit
+
+La feuille ouverte au clic sur un commit affiche son empreinte raccourcie (ligne « Commit »), les
+branches qui pointent directement sur lui (s'il y en a), l'auteur, la date et le ou les parents.
+L'empreinte et chaque nom de branche ont leur propre bouton de copie — le presse-papiers reçoit
+toujours la valeur complète, même quand l'affichage est raccourci.
+
 ## Comment le graphe est construit
 
 Trois étapes, toutes côté navigateur.
@@ -119,12 +126,20 @@ case, aucune arête traversante.
 En tête de `index.html` :
 
 ```js
-const ROW = 54;        // hauteur d'une ligne, en pixels
+const ROW_GAP = 12;    // vide sous la ligne de méta de chaque commit, en pixels
+const FIRST_LINE = 18; // hauteur de la première ligne (références ou titre), où tombe la pastille
 const PAD = 13;        // marge à gauche du premier couloir
 const DOT = 4.6;       // rayon des pastilles
 const MAX_GUTTER = 132;// largeur maximale réservée au graphe
 const COLORS = [...];  // palette cyclique des couloirs
 ```
+
+La hauteur d'une ligne suit son contenu : le titre s'étale sur trois lignes au plus (deux plus une
+ligne de références quand il y en a, via `-webkit-line-clamp`), puis la ligne de méta, puis un vide
+constant `ROW_GAP` — quelle que soit la longueur du titre. Le graphe n'a donc pas de pas fixe :
+`draw()` construit d'abord les lignes, mesure leurs hauteurs réelles, puis place chaque pastille
+sur le milieu de la première ligne de son commit (`FIRST_LINE / 2` sous le haut de la ligne). Un
+redimensionnement refait ce calcul, puisque le texte se replie autrement.
 
 Les traits se resserrent quand les branches se multiplient, puis la colonne de texte cède du terrain.
 Au-delà d'une dizaine de branches simultanées, mieux vaut en décocher dans le sélecteur de branches.
