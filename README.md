@@ -86,10 +86,11 @@ encore dessinée dans le graphe : rien à atteindre pour une branche décochée 
 
 ## Détail d'un commit
 
-La feuille ouverte au clic sur un commit affiche son empreinte raccourcie (ligne « Commit »), les
-branches qui pointent directement sur lui (s'il y en a), l'auteur, la date et le ou les parents.
-L'empreinte et chaque nom de branche ont leur propre bouton de copie — le presse-papiers reçoit
-toujours la valeur complète, même quand l'affichage est raccourci.
+La feuille ouverte au clic sur un commit reprend l'ordre du graphe : d'abord les branches qui
+pointent directement sur lui (s'il y en a), puis le message, puis son empreinte raccourcie (ligne
+« Commit »), l'auteur, la date et le ou les parents. L'empreinte et chaque nom de branche ont leur
+propre bouton de copie — le presse-papiers reçoit toujours la valeur complète, même quand
+l'affichage est raccourci.
 
 ## Comment le graphe est construit
 
