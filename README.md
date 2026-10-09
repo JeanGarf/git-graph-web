@@ -86,10 +86,10 @@ encore dessinée dans le graphe : rien à atteindre pour une branche décochée 
 
 ## Détail d'un commit
 
-La feuille ouverte au clic sur un commit affiche son empreinte raccourcie, les branches qui
-pointent directement sur lui (s'il y en a), l'auteur, la date et le ou les parents. L'empreinte
-et chaque nom de branche ont leur propre bouton de copie — le presse-papiers reçoit toujours la
-valeur complète, même quand l'affichage est raccourci.
+La feuille ouverte au clic sur un commit affiche son empreinte raccourcie (ligne « Commit »), les
+branches qui pointent directement sur lui (s'il y en a), l'auteur, la date et le ou les parents.
+L'empreinte et chaque nom de branche ont leur propre bouton de copie — le presse-papiers reçoit
+toujours la valeur complète, même quand l'affichage est raccourci.
 
 ## Comment le graphe est construit
 
@@ -126,16 +126,19 @@ case, aucune arête traversante.
 En tête de `index.html` :
 
 ```js
-const ROW = 72;        // hauteur d'une ligne, en pixels
+const ROW = 74;        // hauteur d'une ligne, en pixels
+const FIRST_LINE = 18; // hauteur de la première ligne (références ou titre), où tombe la pastille
 const PAD = 13;        // marge à gauche du premier couloir
 const DOT = 4.6;       // rayon des pastilles
 const MAX_GUTTER = 132;// largeur maximale réservée au graphe
 const COLORS = [...];  // palette cyclique des couloirs
 ```
 
-`ROW` doit rester assez grand pour les trois lignes de titre que permet le CSS (`-webkit-line-clamp`)
-plus la ligne de méta : toutes les lignes ont la même hauteur, fixe, car le graphe positionne
-chaque pastille à `r * ROW`.
+`ROW` doit rester assez grand pour le total des lignes que permet le CSS (trois lignes de titre,
+ou deux plus une ligne de références, via `-webkit-line-clamp`) plus la ligne de méta : toutes les
+lignes ont la même hauteur, fixe, car le graphe positionne chaque pastille à `r * ROW + FIRST_LINE / 2`
+— pas au centre de la ligne, mais sur le milieu de sa première ligne, références comprises quand
+il y en a.
 
 Les traits se resserrent quand les branches se multiplient, puis la colonne de texte cède du terrain.
 Au-delà d'une dizaine de branches simultanées, mieux vaut en décocher dans le sélecteur de branches.
