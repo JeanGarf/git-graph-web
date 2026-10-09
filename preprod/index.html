@@ -14,7 +14,7 @@
 :root{
   --bg:#0e131c; --panel:#161d2a; --panel2:#1c2534; --line:#25303f;
   --text:#dbe3ee; --dim:#8a99ad; --accent:#5b9cf5; --danger:#e06c60;
-  --row:72px; --gutter:120px;
+  --row:74px; --gutter:120px;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
   --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
 }
@@ -128,27 +128,35 @@ header{
 #graph{position:relative}
 #lanes{position:absolute;top:0;left:0;pointer-events:none}
 #rows{margin:0;padding:0;list-style:none;margin-left:var(--gutter)}
+/* Le contenu part du haut de la ligne plutôt que d'être centré : c'est ce qui permet à sa première
+   ligne (les références s'il y en a, sinon le titre) de tomber exactement sur la pastille du
+   graphe — voir FIRST_LINE en JS, qui fixe la hauteur de cette première ligne dans les deux cas. */
 .commit{
   height:var(--row); padding:0 14px 0 4px; display:flex; flex-direction:column;
-  justify-content:center; gap:2px; overflow:hidden; cursor:pointer;
+  justify-content:flex-start; gap:2px; overflow:hidden; cursor:pointer;
 }
 .commit:active{background:var(--panel)}
 /* Bref surlignage du commit atteint depuis le panneau de filtrage */
 .commit.localise{animation:localise-flash 1.6s ease}
 @keyframes localise-flash{0%,100%{background:transparent}25%{background:var(--panel2)}}
 @media (prefers-reduced-motion:reduce){.commit.localise{animation:none;background:var(--panel2)}}
-/* Le titre s'étale sur trois lignes avant de tronquer, plutôt qu'une seule : ROW (en JS) est
-   dimensionné pour ces trois lignes plus la ligne de méta ci-dessous. */
+/* Le titre s'étale sur trois lignes avant de tronquer (deux seulement si une ligne de références
+   la précède, pour garder le même total) plutôt qu'une seule : ROW (en JS) est dimensionné pour
+   ce total plus la ligne de méta ci-dessous. */
 .commit .title{
   display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; line-clamp:3;
   overflow:hidden; font-size:14.5px; line-height:18px;
 }
+.commit .title.with-refs{-webkit-line-clamp:2; line-clamp:2}
 .commit .meta{
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   font-size:12px; line-height:15px; color:var(--dim);
 }
 .commit .meta .sha{font-family:var(--mono);font-size:11.5px;margin-right:7px}
-.refs{display:inline-flex;gap:4px;margin-right:6px;vertical-align:middle}
+/* Ligne de références au-dessus du titre, et non plus en préfixe dans son texte : sa hauteur
+   (line-height) doit égaler celle d'une ligne de titre pour que la pastille s'aligne dans les
+   deux cas, avec ou sans référence. */
+.refs{display:flex;align-items:center;gap:4px;line-height:18px;overflow:hidden}
 .ref{
   font-size:11px; padding:1px 6px; border-radius:5px; border:1px solid currentColor;
   font-weight:600; white-space:nowrap;
@@ -281,7 +289,7 @@ header{
 "use strict";
 
 /* ===================== réglages visuels ===================== */
-const ROW = 72, PAD = 13, DOT = 4.6, MAX_GUTTER = 132, LANE_MAX = 18, LANE_MIN = 11;
+const ROW = 74, FIRST_LINE = 18, PAD = 13, DOT = 4.6, MAX_GUTTER = 132, LANE_MAX = 18, LANE_MIN = 11;
 const COLORS = ['#c02000','#ff8a01','#ddcd5d','#88b046','#1765a0','#5757ff','#8057ff','#8000c0'];
 const color = i => COLORS[i % COLORS.length];
 
@@ -669,7 +677,10 @@ function draw(){
   document.documentElement.style.setProperty('--gutter', gutter + 'px');
 
   const X = c => PAD + c * lane;
-  const Y = r => r * ROW + ROW / 2;
+
+  // La pastille s'aligne sur la première ligne du commit (références ou titre), pas sur le centre
+  // de toute la ligne : FIRST_LINE fixe la hauteur de cette première ligne, identique dans les deux cas
+  const Y = r => r * ROW + FIRST_LINE / 2;
   const height = S.order.length * ROW;
   svg.setAttribute('width', gutter);
   svg.setAttribute('height', height);
@@ -714,21 +725,33 @@ function draw(){
     li.dataset.sha = c.sha;
     li.tabIndex = 0;
 
-    const title = document.createElement('div');
-    title.className = 'title';
+    // Les références occupent leur propre ligne, au-dessus du titre, pour que la pastille du
+    // graphe s'aligne sur une première ligne de hauteur constante — voir FIRST_LINE
     const rs = S.refs.get(c.sha);
+    let refsEl = null;
     if (rs){
-      const holder = document.createElement('span');
-      holder.className = 'refs';
-      holder.style.color = color(col.get(c.sha));
+      // Au moins une référence (branche ou étiquette) pointe sur ce commit
+
+      // Construire sa ligne de pastilles, dans la couleur du couloir
+
+      refsEl = document.createElement('div');
+      refsEl.className = 'refs';
+      refsEl.style.color = color(col.get(c.sha));
       for (const ref of rs.slice(0, 3)){
         const b = document.createElement('span');
         b.className = 'ref' + (ref.kind === 'tag' ? ' tag' : '');
         b.textContent = ref.name;
-        holder.appendChild(b);
+        refsEl.appendChild(b);
       }
-      title.appendChild(holder);
+
+    } else {
+      // Aucune référence ne pointe sur ce commit
+
+      // Rien à construire pour cette ligne
     }
+
+    const title = document.createElement('div');
+    title.className = 'title' + (refsEl ? ' with-refs' : '');
     title.appendChild(document.createTextNode(c.title || '(sans message)'));
 
     const meta = document.createElement('div');
@@ -738,6 +761,7 @@ function draw(){
     sha.textContent = c.sha.slice(0, 7);
     meta.append(sha, document.createTextNode(`${c.author} · ${relDate(c.date)}`));
 
+    if (refsEl) li.appendChild(refsEl);
     li.append(title, meta);
     rowsFrag.appendChild(li);
   });
@@ -808,7 +832,7 @@ function openSheet(sha){
   // L'empreinte complète ne tient pas sur une ligne : on l'affiche raccourcie, avec un bouton
   // pour la copier en entier
   const dtSha = document.createElement('dt'), ddSha = document.createElement('dd');
-  dtSha.textContent = 'Empreinte';
+  dtSha.textContent = 'Commit';
   const codeSha = document.createElement('span');
   codeSha.textContent = c.sha.slice(0, 7);
   ddSha.append(codeSha, makeCopyButton(c.sha, "Copier l'empreinte complète"));
