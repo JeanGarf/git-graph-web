@@ -14,7 +14,7 @@
 :root{
   --bg:#0e131c; --panel:#161d2a; --panel2:#1c2534; --line:#25303f;
   --text:#dbe3ee; --dim:#8a99ad; --accent:#5b9cf5; --danger:#e06c60;
-  --row:54px; --gutter:120px;
+  --row:74px; --gutter:120px;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
   --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
 }
@@ -24,9 +24,13 @@
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
+/* Le « tirer pour rafraîchir » d'Android reste disponible sur l'écran principal : il n'est
+   neutralisé que le temps d'une feuille ouverte, où le glissement vers le bas lui appartient.
+   La règle doit porter sur l'élément racine — la valeur de body n'est pas propagée au viewport. */
+html.feuille-ouverte{overscroll-behavior-y:none}
 body{
   background:var(--bg); color:var(--text); font-family:var(--sans);
-  font-size:15px; line-height:1.35; overscroll-behavior-y:none;
+  font-size:15px; line-height:1.35;
   padding-bottom:env(safe-area-inset-bottom);
 }
 button,input{font:inherit;color:inherit}
@@ -39,19 +43,53 @@ header{
 }
 .bar{display:flex;align-items:center;gap:8px;height:52px}
 .repo-field{
+  position:relative;
   flex:1; display:flex; align-items:center; gap:8px; min-width:0;
   background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:0 10px; height:38px;
 }
 .repo-field input{flex:1;min-width:0;background:none;border:0;outline:none;font-size:15px}
 .repo-field input::placeholder{color:var(--dim)}
+.chevron{flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:6px;color:var(--dim)}
+.chevron[hidden]{display:none}
+.chevron svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---------- liste des dépôts déjà ouverts ---------- */
+.recents{
+  position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:40;
+  background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:4px;
+  box-shadow:0 8px 24px rgba(0,0,0,.35); max-height:min(50vh,320px); overflow:auto;
+}
+.recents[hidden]{display:none}
+.recent{display:flex;align-items:center;gap:4px}
+.recent .pick{
+  flex:1; min-width:0; text-align:left; padding:9px 10px; border-radius:7px;
+  font-size:14px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.recent .owner{color:var(--dim)}
+.recent .forget{flex:none;width:28px;height:28px;border-radius:7px;color:var(--dim);font-size:17px;line-height:1}
+.recent .pick:hover,.recent .pick:focus-visible,
+.recent .forget:hover,.recent .forget:focus-visible{background:var(--panel2);outline:none}
 .icon-btn{
+  position:relative;
   height:38px; min-width:38px; display:grid; place-items:center;
   border:1px solid var(--line); border-radius:9px; background:var(--panel); color:var(--dim);
+}
+/* Pastille du bouton de filtrage : allumée dès qu'une branche est masquée */
+#toggle-branches[data-filtered]::after{
+  content:''; position:absolute; top:-3px; right:-3px; width:9px; height:9px;
+  border-radius:99px; background:var(--accent); box-shadow:0 0 0 2px var(--bg);
 }
 .icon-btn:focus-visible,.repo-field:focus-within{outline:2px solid var(--accent);outline-offset:1px}
 .icon-btn[aria-pressed="true"]{color:var(--accent);border-color:var(--accent)}
 .icon-btn svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.go{background:var(--accent);color:#fff;border-color:transparent;padding:0 14px;font-weight:600}
+
+/* ---------- bandeau pré-production ---------- */
+.preprod-banner{
+  position:fixed; z-index:35; top:calc(env(safe-area-inset-top) + 53px); right:12px;
+  padding:2px 10px; border-radius:999px; background:#e67e22; color:#fff;
+  font-size:11px; font-weight:700; letter-spacing:.08em; white-space:nowrap;
+  box-shadow:0 1px 4px rgba(0,0,0,.35); pointer-events:none;
+}
 
 /* ---------- panneaux dépliants ---------- */
 .drawer{border-bottom:1px solid var(--line);background:var(--panel);padding:12px;display:none}
@@ -63,18 +101,24 @@ header{
 .token-row input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:9px 10px;outline:none;font-family:var(--mono);font-size:13px}
 .branches{display:flex;flex-wrap:wrap;gap:6px;max-height:38vh;overflow:auto;margin-bottom:10px}
 .chip{
-  display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:99px;
+  display:inline-flex;align-items:stretch;border-radius:99px;
   border:1px solid var(--line);background:var(--bg);font-size:13px;color:var(--dim);
 }
-.chip[aria-pressed="true"]{color:var(--text);border-color:currentColor}
+.chip[data-pressed="true"]{color:var(--text);border-color:currentColor}
 .chip .dot{width:8px;height:8px;border-radius:99px;background:currentColor;opacity:.55}
-.chip[aria-pressed="true"] .dot{opacity:1}
+.chip[data-pressed="true"] .dot{opacity:1}
+.chip-name{display:inline-flex;align-items:center;gap:6px;padding:6px 4px 6px 10px;color:inherit}
+.chip-locate{display:inline-flex;align-items:center;padding:6px 10px 6px 5px;color:inherit;opacity:.55}
+.chip-locate:disabled{opacity:.22}
+.chip-locate svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .drawer-actions{display:flex;gap:8px;flex-wrap:wrap}
 .btn{border:1px solid var(--line);border-radius:9px;padding:8px 12px;font-size:14px;background:var(--bg)}
 .btn.primary{background:var(--accent);color:#fff;border-color:transparent;font-weight:600}
 
 /* ---------- statut ---------- */
 .status{padding:10px 14px;font-size:13px;color:var(--dim);display:flex;gap:8px;align-items:center}
+/* Sans cela, le display:flex ci-dessus l'emporte sur l'attribut hidden et laisse une bande vide */
+.status[hidden]{display:none}
 .status.error{color:var(--danger)}
 .spinner{width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:99px;animation:spin .7s linear infinite;flex:none}
 @keyframes spin{to{transform:rotate(1turn)}}
@@ -84,20 +128,35 @@ header{
 #graph{position:relative}
 #lanes{position:absolute;top:0;left:0;pointer-events:none}
 #rows{margin:0;padding:0;list-style:none;margin-left:var(--gutter)}
+/* Le contenu part du haut de la ligne plutôt que d'être centré : c'est ce qui permet à sa première
+   ligne (les références s'il y en a, sinon le titre) de tomber exactement sur la pastille du
+   graphe — voir FIRST_LINE en JS, qui fixe la hauteur de cette première ligne dans les deux cas. */
 .commit{
   height:var(--row); padding:0 14px 0 4px; display:flex; flex-direction:column;
-  justify-content:center; gap:2px; overflow:hidden; cursor:pointer;
+  justify-content:flex-start; gap:2px; overflow:hidden; cursor:pointer;
 }
 .commit:active{background:var(--panel)}
+/* Bref surlignage du commit atteint depuis le panneau de filtrage */
+.commit.localise{animation:localise-flash 1.6s ease}
+@keyframes localise-flash{0%,100%{background:transparent}25%{background:var(--panel2)}}
+@media (prefers-reduced-motion:reduce){.commit.localise{animation:none;background:var(--panel2)}}
+/* Le titre s'étale sur trois lignes avant de tronquer (deux seulement si une ligne de références
+   la précède, pour garder le même total) plutôt qu'une seule : ROW (en JS) est dimensionné pour
+   ce total plus la ligne de méta ci-dessous. */
 .commit .title{
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:14.5px;
+  display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; line-clamp:3;
+  overflow:hidden; font-size:14.5px; line-height:18px;
 }
+.commit .title.with-refs{-webkit-line-clamp:2; line-clamp:2}
 .commit .meta{
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  font-size:12px; color:var(--dim);
+  font-size:12px; line-height:15px; color:var(--dim);
 }
 .commit .meta .sha{font-family:var(--mono);font-size:11.5px;margin-right:7px}
-.refs{display:inline-flex;gap:4px;margin-right:6px;vertical-align:middle}
+/* Ligne de références au-dessus du titre, et non plus en préfixe dans son texte : sa hauteur
+   (line-height) doit égaler celle d'une ligne de titre pour que la pastille s'aligne dans les
+   deux cas, avec ou sans référence. */
+.refs{display:flex;align-items:center;gap:4px;line-height:18px;overflow:hidden}
 .ref{
   font-size:11px; padding:1px 6px; border-radius:5px; border:1px solid currentColor;
   font-weight:600; white-space:nowrap;
@@ -119,18 +178,33 @@ header{
   border-top:1px solid var(--line); border-radius:16px 16px 0 0;
   padding:8px 16px calc(24px + env(safe-area-inset-bottom));
   transform:translateY(101%); transition:transform .2s cubic-bezier(.2,.7,.3,1);
-  max-height:80vh; overflow:auto;
+  max-height:80vh; overflow:auto; overscroll-behavior:contain;
 }
 .sheet.open{transform:none}
+/* Pendant le glissement, la feuille doit coller au doigt et non le rattraper en différé */
+.sheet.dragging{transition:none}
 @media (prefers-reduced-motion:reduce){.sheet{transition:none}}
-.grip{width:36px;height:4px;border-radius:9px;background:var(--line);margin:6px auto 14px}
+/* La zone de saisie déborde largement le trait dessiné, pour rester attrapable au pouce */
+.grip-zone{padding:8px 0 12px;margin:-6px -16px 2px;touch-action:none;cursor:grab}
+.grip-zone:active{cursor:grabbing}
+.grip{width:36px;height:4px;border-radius:9px;background:var(--line);margin:0 auto}
 .sheet pre{
   margin:0 0 14px; white-space:pre-wrap; word-break:break-word;
   font-family:var(--sans); font-size:15px; line-height:1.45;
 }
 .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px;margin-bottom:16px}
 .kv dt{color:var(--dim)}
-.kv dd{margin:0;font-family:var(--mono);font-size:12.5px;word-break:break-all}
+.kv dd{
+  margin:0;font-family:var(--mono);font-size:12.5px;word-break:break-all;
+  display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+}
+.copy{display:inline-flex;align-items:center;flex:none;padding:3px;border-radius:7px;color:var(--dim)}
+.copy svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.copy.copied{color:var(--accent)}
+.branch-pill{
+  display:inline-flex;align-items:center;gap:2px;padding:3px 3px 3px 9px;border-radius:99px;
+  border:1px solid currentColor;font-weight:600;
+}
 .sheet .btn{display:block;text-align:center;text-decoration:none;color:inherit}
 </style>
 </head>
@@ -141,10 +215,17 @@ header{
     <div class="repo-field">
       <input id="repo" type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false"
              placeholder="proprietaire/depot" aria-label="Dépôt GitHub">
+      <button class="chevron" id="toggle-recents" type="button" hidden
+              aria-label="Dépôts déjà ouverts" title="Dépôts déjà ouverts">
+        <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg>
+      </button>
+      <div class="recents" id="recents" hidden></div>
     </div>
-    <button class="icon-btn go" id="load">Ouvrir</button>
-    <button class="icon-btn" id="toggle-branches" aria-pressed="false" aria-label="Choisir les branches" title="Branches">
-      <svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 8.5v7M8.5 6h5a4 4 0 0 1 4 4v.5"/></svg>
+    <button class="icon-btn" id="load" aria-label="Ouvrir" title="Ouvrir">
+      <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.4-6.4L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.4 6.4L3 16"/><path d="M3 21v-5h5"/></svg>
+    </button>
+    <button class="icon-btn" id="toggle-branches" aria-pressed="false" aria-label="Filtrer les branches" title="Filtrer les branches">
+      <svg viewBox="0 0 24 24"><path d="M21 4H3l7.2 8.5V19l3.6 1.8v-8.3L21 4z"/></svg>
     </button>
     <button class="icon-btn" id="toggle-token" aria-pressed="false" aria-label="Jeton d'accès" title="Jeton">
       <svg viewBox="0 0 24 24"><circle cx="8" cy="12" r="3.2"/><path d="M11.2 12H21m-3 0v3m-3-3v2.2"/></svg>
@@ -157,7 +238,7 @@ header{
        Créez un jeton <em>fine-grained</em> avec la seule permission <strong>Contents : Read-only</strong> sur les dépôts voulus.
        Il reste dans le stockage local de ce navigateur et ne part que vers api.github.com.</p>
     <div class="token-row">
-      <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_… ou ghp_…" aria-label="Jeton">
+      <input id="token" type="password" autocomplete="new-password" spellcheck="false" placeholder="github_pat_… ou ghp_…" aria-label="Jeton">
       <button class="btn primary" id="save-token">Enregistrer</button>
     </div>
     <div class="drawer-actions" style="margin-top:10px">
@@ -176,6 +257,8 @@ header{
     </div>
   </section>
 </header>
+
+<div class="preprod-banner" id="preprod-banner" hidden>PRÉ-PRODUCTION</div>
 
 <div class="status" id="status" hidden></div>
 
@@ -196,7 +279,7 @@ header{
 
 <div class="sheet-bg" id="sheet-bg"></div>
 <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-label="Détail du commit">
-  <div class="grip"></div>
+  <div class="grip-zone" id="sheet-grip"><div class="grip"></div></div>
   <pre id="sheet-msg"></pre>
   <dl class="kv" id="sheet-kv"></dl>
   <a class="btn" id="sheet-link" target="_blank" rel="noopener">Ouvrir sur GitHub</a>
@@ -206,14 +289,20 @@ header{
 "use strict";
 
 /* ===================== réglages visuels ===================== */
-const ROW = 54, PAD = 13, DOT = 4.6, MAX_GUTTER = 132, LANE_MAX = 18, LANE_MIN = 11;
-const COLORS = ['#5b9cf5','#e0a83a','#48bd8a','#e57aa8','#a684f0','#ef8a4c','#3ec2cf','#d96550'];
+const ROW = 74, FIRST_LINE = 18, PAD = 13, DOT = 4.6, MAX_GUTTER = 132, LANE_MAX = 18, LANE_MIN = 11;
+const COLORS = ['#c02000','#ff8a01','#ddcd5d','#88b046','#1765a0','#5757ff','#8057ff','#8000c0'];
 const color = i => COLORS[i % COLORS.length];
+
+/* ===================== autres réglages ===================== */
+const MAX_RECENTS = 12;                 // dépôts retenus dans la liste de reprise
+const SHEET_CLOSE_PX = 90;              // glissement au-delà duquel la feuille de détail se ferme
+const SHEET_DRAG_PX = 6;                // mouvement avant qu'un tap ne devienne un glissement
 
 /* ===================== état ===================== */
 const S = {
   owner:'', repo:'', token:'', depth:100,
-  branches:[], selected:new Set(), refs:new Map(), commits:new Map(), order:[], busy:false
+  branches:[], selected:new Set(), refs:new Map(), commits:new Map(), order:[], busy:false,
+  statusTimer:null, sheetDrag:null, sheetBack:false, laneOf:new Map()
 };
 const $ = s => document.querySelector(s);
 // Les attributs de présentation SVG n'acceptent pas var() partout : on lit la couleur réelle.
@@ -245,9 +334,9 @@ function humanError(res, body){
   if (res.status === 403 && left === '0')
     return S.token ? "Quota d'API épuisé. Réessayez dans une heure."
                    : "Quota anonyme épuisé (60 requêtes/h). Ajoutez un jeton avec la clé.";
-  if (res.status === 403) return "Accès refusé : le jeton ne couvre pas ce dépôt.";
+  if (res.status === 403) return "Accès refusé : ce dépôt n'est pas dans la sélection du jeton.";
   if (res.status === 404)
-    return S.token ? "Dépôt introuvable, ou le jeton n'a pas la permission Contents sur ce dépôt."
+    return S.token ? "Dépôt introuvable. Vérifiez le nom, ou ajoutez-le à la sélection du jeton."
                    : "Dépôt introuvable. S'il est privé, ajoutez un jeton avec la clé.";
   if (res.status === 409) return "Ce dépôt n'a aucun commit.";
   return (body && body.message) ? body.message : ("Erreur " + res.status);
@@ -272,6 +361,134 @@ async function pool(items, width, fn){
 }
 
 /* ===================== chargement ===================== */
+
+//
+// Liste de reprise : les dépôts déjà ouverts, du plus récent au plus ancien
+//
+// Elle vit dans le stockage local, sans jamais interroger l'API : un jeton fine-grained étant
+// rattaché à un seul propriétaire, aucun appel ne saurait lister d'un coup des dépôts de comptes
+// différents. La liste, elle, mélange les propriétaires sans difficulté puisqu'elle retient des
+// noms complets « proprietaire/depot ».
+//
+
+function readRecents(){
+  let list;
+
+  try{ list = JSON.parse(LS.get('recents', '[]')); }
+  catch(e){ list = []; }
+
+  return Array.isArray(list) ? list : [];
+}
+
+// Remet le dépôt en tête, sans doublon, et oublie les plus anciens au-delà de MAX_RECENTS.
+function pushRecent(fullName){
+  const list = readRecents().filter(name => name !== fullName);
+  list.unshift(fullName);
+  LS.set('recents', JSON.stringify(list.slice(0, MAX_RECENTS)));
+  updateRecentsToggle();
+}
+
+function forgetRecent(fullName){
+  LS.set('recents', JSON.stringify(readRecents().filter(name => name !== fullName)));
+  updateRecentsToggle();
+}
+
+// Le chevron n'apparaît que s'il y a quelque chose à proposer
+function updateRecentsToggle(){
+  $('#toggle-recents').hidden = readRecents().length === 0;
+}
+
+function hideRecents(){
+  $('#recents').hidden = true;
+}
+
+// Affiche les dépôts retenus dont le nom contient `filtre` : le panneau sert donc aussi bien à
+// reprendre un dépôt d'un clic (filtre vide) qu'à compléter une saisie commencée.
+function renderRecents(filtre){
+  const box = $('#recents'), terme = filtre.toLowerCase();
+  const liste = readRecents().filter(nom => nom.toLowerCase().includes(terme));
+
+  box.textContent = '';
+
+  liste.forEach(nom => {
+
+    // Chaque ligne propose le dépôt à gauche, et son oubli à droite
+
+    const ligne = document.createElement('div');
+    ligne.className = 'recent';
+    ligne.append(makeRecentPick(nom), makeRecentForget(nom, filtre));
+    box.appendChild(ligne);
+  });
+
+  box.hidden = !liste.length;
+}
+
+// Le bouton qui charge le dépôt : le propriétaire est grisé pour que le nom du dépôt ressorte.
+function makeRecentPick(nom){
+  const btn = document.createElement('button');
+  const coupe = nom.indexOf('/');
+  const proprio = document.createElement('span');
+
+  btn.className = 'pick';
+  btn.type = 'button';
+  proprio.className = 'owner';
+  proprio.textContent = nom.slice(0, coupe + 1);
+  btn.append(proprio, document.createTextNode(nom.slice(coupe + 1)));
+
+  btn.onclick = () => {
+    $('#repo').value = nom;
+    hideRecents();
+    S.depth = 100;
+    loadRepo();
+  };
+
+  return btn;
+}
+
+// Le bouton qui retire le dépôt de la liste, pour les saisies devenues inutiles.
+function makeRecentForget(nom, filtre){
+  const btn = document.createElement('button');
+
+  btn.className = 'forget';
+  btn.type = 'button';
+  btn.textContent = '×';
+  btn.setAttribute('aria-label', 'Oublier ' + nom);
+  btn.onclick = () => { forgetRecent(nom); renderRecents(filtre); };
+
+  return btn;
+}
+
+//
+// Mémorisation du dépôt courant : l'URL porte le dépôt de CET onglet, le stockage local celui du
+// dernier onglet en date
+//
+// Deux onglets peuvent ainsi suivre deux dépôts différents, et un rafraîchissement rejoue bien
+// celui de l'onglet. Le stockage local, commun à tous les onglets, ne sert plus qu'à proposer le
+// dernier dépôt ouvert à un onglet arrivé sans paramètre.
+//
+
+function rememberRepo(fullName){
+
+  // On réécrit l'URL de l'onglet, sans recharger la page ni empiler d'entrée d'historique
+
+  try{
+    const url = new URL(location.href);
+    url.searchParams.set('repo', fullName);
+    history.replaceState(null, '', url);
+  }catch(e){ /* URL non réinscriptible : le stockage local prendra le relais */ }
+
+  // Le dernier dépôt ouvert servira de proposition aux prochains onglets
+  LS.set('repo', fullName);
+}
+
+// Le tiroir du jeton ne doit s'ouvrir que s'il peut débloquer la situation : sans jeton, en ajouter
+// un peut suffire ; avec un jeton, seul un refus franc (401) le met en cause — un 403 ou un 404
+// désigne le dépôt demandé, pas la clé, qui reste valable pour les autres dépôts.
+function needsToken(err){
+  const denied = err.status === 401 || err.status === 403 || err.status === 404;
+  return err.status === 401 || (denied && !S.token);
+}
+
 async function loadRepo({keepBranches=false} = {}){
   if (S.busy) return;
   const raw = $('#repo').value.trim()
@@ -279,7 +496,12 @@ async function loadRepo({keepBranches=false} = {}){
   const m = raw.match(/^([\w.-]+)\/([\w.-]+)/);
   if (!m){ setStatus("Format attendu : proprietaire/depot", true); return; }
   S.owner = m[1]; S.repo = m[2];
-  LS.set('repo', S.owner + '/' + S.repo);
+
+  // Cet onglet suit désormais ce dépôt : on le note dans son URL
+  rememberRepo(S.owner + '/' + S.repo);
+
+  // Le titre de la page reflète le dépôt saisi
+  document.title = `${S.owner}/${S.repo} -- git-graph-web`;
   S.busy = true;
 
   try{
@@ -345,11 +567,23 @@ async function loadRepo({keepBranches=false} = {}){
     S.refs = refs;
     S.order = topoOrder(commits);
     draw();
+
+    // Les couloirs ne sont connus qu'une fois le graphe dessiné : le panneau de filtrage se
+    // recolore à son tour, sur ces couleurs-là plutôt que sur celles du chargement précédent
+    renderBranchPicker();
+
+    // Le dépôt s'est chargé pour de bon : il rejoint la liste de reprise
+    pushRecent(S.owner + '/' + S.repo);
+
     setStatus(`${S.order.length} commits sur ${chosen.length} branche${chosen.length>1?'s':''}`);
-    setTimeout(()=>setStatus(null), 2600);
+    S.statusTimer = setTimeout(()=>setStatus(null), 2600);
   } catch(err){
+
+    // Afficher l'erreur, et n'ouvrir le tiroir du jeton que s'il peut y remédier
+
     setStatus(err.message || String(err), true);
-    if (err.status === 401 || err.status === 403 || err.status === 404) openDrawer('token', true);
+    openDrawer('token', needsToken(err));
+
   } finally {
     S.busy = false;
   }
@@ -422,9 +656,17 @@ function draw(){
   rowsEl.textContent = ''; svg.textContent = '';
   $('#empty').hidden = S.order.length > 0;
   $('#foot').hidden = S.order.length === 0;
-  if (!S.order.length){ svg.setAttribute('height', 0); return; }
+  if (!S.order.length){
+    // Sans commit, plus aucun couloir n'est attribué : les chips du panneau retombent en neutre
+    S.laneOf = new Map();
+    svg.setAttribute('height', 0);
+    return;
+  }
 
   const { col, row, edges, laneCount } = assignLanes(S.order, S.commits);
+
+  // Le panneau de filtrage colore ses chips d'après ce couloir, pour rester cohérent avec le graphe
+  S.laneOf = col;
   // La gouttière s'adapte au nombre de couloirs sans jamais les rogner :
   // les traits se resserrent d'abord, puis la colonne de texte cède du terrain.
   const budget = Math.min(MAX_GUTTER, Math.round(window.innerWidth * 0.45));
@@ -435,7 +677,10 @@ function draw(){
   document.documentElement.style.setProperty('--gutter', gutter + 'px');
 
   const X = c => PAD + c * lane;
-  const Y = r => r * ROW + ROW / 2;
+
+  // La pastille s'aligne sur la première ligne du commit (références ou titre), pas sur le centre
+  // de toute la ligne : FIRST_LINE fixe la hauteur de cette première ligne, identique dans les deux cas
+  const Y = r => r * ROW + FIRST_LINE / 2;
   const height = S.order.length * ROW;
   svg.setAttribute('width', gutter);
   svg.setAttribute('height', height);
@@ -480,21 +725,33 @@ function draw(){
     li.dataset.sha = c.sha;
     li.tabIndex = 0;
 
-    const title = document.createElement('div');
-    title.className = 'title';
+    // Les références occupent leur propre ligne, au-dessus du titre, pour que la pastille du
+    // graphe s'aligne sur une première ligne de hauteur constante — voir FIRST_LINE
     const rs = S.refs.get(c.sha);
+    let refsEl = null;
     if (rs){
-      const holder = document.createElement('span');
-      holder.className = 'refs';
-      holder.style.color = color(col.get(c.sha));
+      // Au moins une référence (branche ou étiquette) pointe sur ce commit
+
+      // Construire sa ligne de pastilles, dans la couleur du couloir
+
+      refsEl = document.createElement('div');
+      refsEl.className = 'refs';
+      refsEl.style.color = color(col.get(c.sha));
       for (const ref of rs.slice(0, 3)){
         const b = document.createElement('span');
         b.className = 'ref' + (ref.kind === 'tag' ? ' tag' : '');
         b.textContent = ref.name;
-        holder.appendChild(b);
+        refsEl.appendChild(b);
       }
-      title.appendChild(holder);
+
+    } else {
+      // Aucune référence ne pointe sur ce commit
+
+      // Rien à construire pour cette ligne
     }
+
+    const title = document.createElement('div');
+    title.className = 'title' + (refsEl ? ' with-refs' : '');
     title.appendChild(document.createTextNode(c.title || '(sans message)'));
 
     const meta = document.createElement('div');
@@ -504,6 +761,7 @@ function draw(){
     sha.textContent = c.sha.slice(0, 7);
     meta.append(sha, document.createTextNode(`${c.author} · ${relDate(c.date)}`));
 
+    if (refsEl) li.appendChild(refsEl);
     li.append(title, meta);
     rowsFrag.appendChild(li);
   });
@@ -520,6 +778,46 @@ function relDate(iso){
 }
 
 /* ===================== feuille de détail ===================== */
+
+//
+// Copie dans le presse-papiers
+//
+// Réutilisée pour le nom d'une branche comme pour l'empreinte complète d'un commit : même bouton,
+// même retour visuel bref (couleur et infobulle), sans dupliquer cette mécanique à chaque usage.
+//
+
+async function copyToClipboard(text, btn){
+  try{
+    await navigator.clipboard.writeText(text);
+
+    // La copie a réussi
+
+    // Le bouton se colore et son infobulle le confirme, puis tout redevient neutre
+    const titreInitial = btn.title;
+    btn.classList.add('copied');
+    btn.title = 'Copié !';
+    btn.setAttribute('aria-label', 'Copié !');
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      btn.title = titreInitial;
+      btn.setAttribute('aria-label', titreInitial);
+    }, 1200);
+
+  }catch(e){ /* Presse-papiers inaccessible : rien d'autre à faire que copier à la main */ }
+}
+
+function makeCopyButton(text, label){
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'copy';
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+  btn.innerHTML = '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/>'
+    + '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  btn.onclick = () => copyToClipboard(text, btn);
+  return btn;
+}
+
 function openSheet(sha){
   const c = S.commits.get(sha);
   if (!c) return;
@@ -530,15 +828,211 @@ function openSheet(sha){
     const dt = document.createElement('dt'), dd = document.createElement('dd');
     dt.textContent = k; dd.textContent = v; kv.append(dt, dd);
   };
-  add('Empreinte', c.sha);
+
+  // L'empreinte complète ne tient pas sur une ligne : on l'affiche raccourcie, avec un bouton
+  // pour la copier en entier
+  const dtSha = document.createElement('dt'), ddSha = document.createElement('dd');
+  dtSha.textContent = 'Commit';
+  const codeSha = document.createElement('span');
+  codeSha.textContent = c.sha.slice(0, 7);
+  ddSha.append(codeSha, makeCopyButton(c.sha, "Copier l'empreinte complète"));
+  kv.append(dtSha, ddSha);
+
+  const branches = (S.refs.get(sha) || []).filter(r => r.kind !== 'tag');
+  if (branches.length){
+    // Au moins une branche pointe directement sur ce commit
+
+    // Une pastille par branche, dans la couleur de son couloir, avec un bouton de copie chacune
+
+    const dt = document.createElement('dt'), dd = document.createElement('dd');
+    dt.textContent = branches.length > 1 ? 'Branches' : 'Branche';
+    const lane = S.laneOf.get(sha);
+    for (const b of branches){
+      const pill = document.createElement('span');
+      pill.className = 'branch-pill';
+      if (lane != null) pill.style.color = color(lane);
+      const name = document.createElement('span');
+      name.textContent = b.name;
+      pill.append(name, makeCopyButton(b.name, `Copier ${b.name}`));
+      dd.appendChild(pill);
+    }
+    kv.append(dt, dd);
+
+  } else {
+    // Aucune branche ne pointe directement sur ce commit
+
+    // Rien à ajouter : cette ligne n'a pas lieu d'apparaître dans la feuille
+  }
+
   add('Auteur', c.author);
   add('Date', new Date(c.date).toLocaleString('fr-FR'));
   add(c.parents.length > 1 ? 'Parents' : 'Parent', c.parents.map(p => p.slice(0,7)).join('  ') || '(commit racine)');
   $('#sheet-link').href = c.url;
+
+  // Afficher la feuille et son fond, et confisquer le « tirer pour rafraîchir » le temps du séjour
+
   $('#sheet').classList.add('open');
   $('#sheet-bg').classList.add('open');
+  document.documentElement.classList.add('feuille-ouverte');
+
+  pushSheetHistory();
 }
-function closeSheet(){ $('#sheet').classList.remove('open'); $('#sheet-bg').classList.remove('open'); }
+
+//
+// Fermeture de la feuille de détail
+//
+// Trois gestes la referment : le bouton Retour d'Android, un glissement vers le bas depuis la
+// poignée, et le clic sur le fond. Sans l'entrée d'historique, le Retour quitterait l'application
+// alors que l'utilisateur ne demandait qu'à sortir de la feuille.
+//
+
+function pushSheetHistory(){
+  if (!S.sheetBack){
+    // Aucune entrée d'historique ne représente encore la feuille ouverte
+
+    // En empiler une, en gardant l'URL courante (elle porte déjà le dépôt de l'onglet)
+
+    try{
+      history.pushState({ sheet:true }, '');
+      S.sheetBack = true;
+    }catch(e){
+      S.sheetBack = false;
+    }
+  } else {
+    // Une entrée représente déjà la feuille
+
+    // Ne pas en empiler une seconde, sinon il faudrait deux Retour pour sortir
+  }
+}
+
+function hideSheet(){
+  // Masquer la feuille et son fond, et rendre le « tirer pour rafraîchir » à l'écran principal
+
+  $('#sheet').classList.remove('open');
+  $('#sheet-bg').classList.remove('open');
+  document.documentElement.classList.remove('feuille-ouverte');
+}
+
+function closeSheet(){
+  if (S.sheetBack){
+    // Une entrée d'historique représente la feuille ouverte
+
+    // La dépiler, et laisser popstate procéder au masquage
+
+    S.sheetBack = false;
+    history.back();
+  } else {
+    // Aucune entrée d'historique à dépiler
+
+    // Masquer directement
+    hideSheet();
+  }
+}
+
+//
+// Glissement de la feuille vers le bas
+//
+// La poignée annonce un geste : si celui-ci n'existe pas, le doigt descend jusqu'au bord haut de
+// l'écran et déclenche le « tirer pour rafraîchir » d'Android.
+//
+
+function beginSheetDrag(e){
+  const sheet = $('#sheet');
+  if (e.target.closest('#sheet-grip') || sheet.scrollTop === 0){
+    // Le geste part de la poignée OU du haut d'un contenu qui n'a pas encore défilé
+
+    // Retenir le point de départ, SANS capturer le pointeur tout de suite : un simple tap sur un
+    // bouton du contenu doit rester un clic normal, seul un vrai mouvement déclenchera le glissement
+
+    S.sheetDrag = { id:e.pointerId, y0:e.clientY, dy:0, captured:false };
+
+  } else {
+    // Le geste part d'un contenu déjà défilé
+
+    // Le laisser au défilement de la feuille
+  }
+}
+
+function moveSheetDrag(e){
+  const drag = S.sheetDrag;
+  if (drag && e.pointerId === drag.id){
+    // Le doigt qui bouge est bien celui qui a saisi la feuille
+
+    const sheet = $('#sheet');
+    drag.dy = Math.max(0, e.clientY - drag.y0);
+
+    if (!drag.captured && drag.dy > SHEET_DRAG_PX){
+      // Le mouvement dépasse le seuil : ce n'est plus un tap, mais un glissement
+
+      // On capture le pointeur à partir de maintenant, et on suspend la transition
+      drag.captured = true;
+      sheet.classList.add('dragging');
+      sheet.setPointerCapture(e.pointerId);
+
+    } else {
+      // Le seuil n'est pas encore franchi OU le glissement est déjà capturé
+
+      // Rien à activer de plus ici
+    }
+
+    if (drag.captured){
+      // Le glissement est actif
+
+      // La feuille suit le doigt, mais ne remonte jamais au-dessus de sa position ouverte
+      sheet.style.transform = `translateY(${drag.dy}px)`;
+
+    } else {
+      // Le glissement n'est pas encore actif
+
+      // Rien à afficher : on attend de dépasser le seuil, ou le tap se terminera normalement
+    }
+
+  } else {
+    // Aucun glissement en cours OU un autre doigt sur l'écran
+
+    // Rien à suivre
+  }
+}
+
+function endSheetDrag(e){
+  const drag = S.sheetDrag;
+  if (drag && e.pointerId === drag.id){
+    // Le doigt qui tenait la feuille quitte l'écran, ou le navigateur reprend le geste
+
+    S.sheetDrag = null;
+
+    if (drag.captured){
+      // Le glissement avait réellement commencé
+
+      // Rendre la main à la transition avant de trancher entre fermeture et retour en place
+      const sheet = $('#sheet');
+      sheet.classList.remove('dragging');
+      sheet.style.transform = '';
+
+      if (e.type === 'pointerup' && drag.dy > SHEET_CLOSE_PX){
+        // Le geste s'est achevé au-delà de la distance de fermeture
+
+        // Refermer la feuille
+        closeSheet();
+
+      } else {
+        // Le geste est resté trop court OU le navigateur l'a interrompu
+
+        // Laisser la transition ramener la feuille à sa place
+      }
+
+    } else {
+      // Le glissement n'avait jamais démarré : c'était un simple tap
+
+      // Rien à défaire : le clic sous-jacent se déroule normalement
+    }
+
+  } else {
+    // Aucun glissement en cours OU un autre doigt
+
+    // Rien à conclure
+  }
+}
 
 /* ===================== panneaux ===================== */
 function openDrawer(which, force){
@@ -549,28 +1043,105 @@ function openDrawer(which, force){
   if (open && which === 'token') $('#token').focus();
 }
 
+// Le bouton de filtrage porte une pastille dès qu'une branche est masquée, et son infobulle donne
+// le compte exact : sans cela, rien ne distingue « tout est affiché » de « 12 branches sur 47 »,
+// puisque l'app en masque déjà d'office au-delà des douze premières.
+function updateBranchFilter(){
+  const total = S.branches.length, shown = S.selected.size;
+  const btn = $('#toggle-branches');
+
+  if (shown < total){
+    // Une partie des branches du dépôt est masquée
+
+    // On allume la pastille et l'infobulle annonce le compte
+
+    btn.dataset.filtered = 'oui';
+    btn.title = `Filtrer les branches : ${shown} sur ${total} affichées`;
+
+  } else {
+    // Toutes les branches connues sont affichées OU aucun dépôt n'est encore chargé
+
+    // On éteint la pastille et l'infobulle redevient neutre
+
+    delete btn.dataset.filtered;
+    btn.title = "Filtrer les branches";
+  }
+
+  btn.setAttribute('aria-label', btn.title);
+}
+
 function renderBranchPicker(){
   const list = $('#branch-list');
   list.textContent = '';
-  S.branches.forEach((b, i) => {
-    const btn = document.createElement('button');
-    btn.className = 'chip';
-    btn.type = 'button';
-    btn.setAttribute('aria-pressed', String(S.selected.has(b.name)));
-    btn.style.color = S.selected.has(b.name) ? color(i) : '';
+  S.branches.forEach((b) => {
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    const selected = S.selected.has(b.name);
+    chip.dataset.pressed = String(selected);
+
+    // Le couloir vient du graphe déjà dessiné, pour rester cohérent avec ses couleurs
+    const lane = S.laneOf.get(b.commit.sha);
+    chip.style.color = (selected && lane != null) ? color(lane) : '';
+
+    const nameBtn = document.createElement('button');
+    nameBtn.className = 'chip-name';
+    nameBtn.type = 'button';
+    nameBtn.setAttribute('aria-pressed', String(selected));
     const dot = document.createElement('span');
     dot.className = 'dot';
-    btn.append(dot, document.createTextNode(b.name));
-    btn.onclick = () => {
+    nameBtn.append(dot, document.createTextNode(b.name));
+    nameBtn.onclick = () => {
       S.selected.has(b.name) ? S.selected.delete(b.name) : S.selected.add(b.name);
       renderBranchPicker();
     };
-    list.appendChild(btn);
+
+    const locateBtn = document.createElement('button');
+    locateBtn.className = 'chip-locate';
+    locateBtn.type = 'button';
+    locateBtn.disabled = lane == null;
+    locateBtn.title = lane == null ? 'Branche pas encore chargée' : `Localiser ${b.name} dans l'historique`;
+    locateBtn.setAttribute('aria-label', locateBtn.title);
+    locateBtn.innerHTML = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/>'
+      + '<path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>';
+    locateBtn.onclick = () => locateBranch(b);
+
+    chip.append(nameBtn, locateBtn);
+    list.appendChild(chip);
+  });
+
+  // Le bouton du panneau reflète l'état du filtre
+  updateBranchFilter();
+}
+
+//
+// Localisation d'une branche depuis le panneau de filtrage
+//
+// Le commit de tête n'est atteignable que s'il a déjà un couloir, donc déjà dessiné dans
+// l'historique : c'est pourquoi le bouton reste désactivé tant que la branche n'est pas chargée.
+//
+
+function locateBranch(b){
+  const li = document.querySelector(`#rows li[data-sha="${b.commit.sha}"]`);
+  if (!li) return;
+  openDrawer('branches', false);
+
+  // Le tiroir vient de se refermer : on attend le reflux avant de calculer la position à atteindre
+  requestAnimationFrame(() => {
+    li.scrollIntoView({ behavior:'smooth', block:'center' });
+    li.classList.add('localise');
+    setTimeout(() => li.classList.remove('localise'), 1600);
   });
 }
 
 function setStatus(msg, isError){
   const el = $('#status');
+
+  // Un nouveau statut annule l'effacement automatique du précédent, sinon celui-ci pourrait
+  // effacer ce message-ci après coup
+
+  clearTimeout(S.statusTimer);
+  S.statusTimer = null;
+
   el.hidden = !msg;
   el.className = 'status' + (isError ? ' error' : '');
   el.textContent = '';
@@ -584,8 +1155,56 @@ function setStatus(msg, isError){
 }
 
 /* ===================== branchements ===================== */
-$('#load').onclick = () => { S.depth = 100; loadRepo(); };
-$('#repo').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); S.depth = 100; loadRepo(); } });
+$('#load').onclick = () => { S.depth = 100; hideRecents(); loadRepo(); };
+$('#repo').addEventListener('keydown', e => {
+
+  if (e.key === 'Enter'){
+    // La touche Entrée demande le chargement du dépôt saisi
+
+    // On referme la liste et on charge
+
+    e.preventDefault();
+    hideRecents();
+    S.depth = 100;
+    loadRepo();
+
+  } else if (e.key === 'Escape'){
+    // La touche Échap demande l'abandon de la liste
+
+    // On referme la liste sans rien charger
+    hideRecents();
+
+  } else {
+    // Toute autre touche participe à la saisie
+
+    // L'évènement « input » se chargera de filtrer la liste
+  }
+});
+
+// Prendre le champ montre tout ce qui est retenu ; taper dedans restreint à ce qui correspond
+
+$('#repo').addEventListener('focus', () => renderRecents(''));
+$('#repo').addEventListener('click', () => renderRecents(''));
+$('#repo').addEventListener('input', () => renderRecents($('#repo').value.trim()));
+
+$('#toggle-recents').onclick = () => {
+
+  if ($('#recents').hidden){
+    // La liste est fermée
+
+    // On l'ouvre en entier, sans tenir compte de ce qui est déjà saisi
+    renderRecents('');
+
+  } else {
+    // La liste est ouverte
+
+    // On la referme
+    hideRecents();
+  }
+};
+
+// Un clic hors du champ referme la liste
+document.addEventListener('click', e => { if (!e.target.closest('.repo-field')) hideRecents(); });
 $('#more').onclick = () => { S.depth += 100; loadRepo({keepBranches:true}); };
 $('#toggle-token').onclick = () => openDrawer('token');
 $('#toggle-branches').onclick = () => openDrawer('branches');
@@ -612,17 +1231,55 @@ $('#rows').addEventListener('keydown', e => {
 });
 $('#sheet-bg').onclick = closeSheet;
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
+
+// Glissement de la feuille : la capture du pointeur garantit de recevoir la fin du geste même si
+// le doigt sort de la feuille en chemin
+
+$('#sheet').addEventListener('pointerdown', beginSheetDrag);
+$('#sheet').addEventListener('pointermove', moveSheetDrag);
+$('#sheet').addEventListener('pointerup', endSheetDrag);
+$('#sheet').addEventListener('pointercancel', endSheetDrag);
+
+// Le bouton Retour d'Android dépile l'entrée posée à l'ouverture : il referme la feuille au lieu
+// de quitter l'application
+
+window.addEventListener('popstate', () => {
+  if ($('#sheet').classList.contains('open')){
+    // Le retour arrière survient alors que la feuille est ouverte
+
+    // Oublier l'entrée qui vient de disparaître, puis masquer
+
+    S.sheetBack = false;
+    hideSheet();
+
+  } else {
+    // La feuille est déjà fermée
+
+    // Laisser la navigation suivre son cours
+  }
+});
 window.addEventListener('resize', () => { if (S.order.length) draw(); });
 
 /* ===================== démarrage ===================== */
+
+// Le bandeau de pré-production ne s'affiche que si l'app est servie depuis /preprod/
+$('#preprod-banner').hidden = !location.pathname.includes('/preprod/');
+
 S.token = LS.get('token', '') || '';
 $('#token').value = S.token;
+
+// Le chevron de la liste de reprise n'a de sens que si des dépôts ont déjà été ouverts
+updateRecentsToggle();
 const params = new URLSearchParams(location.search);
 const start = params.get('repo') || LS.get('repo', '');
 if (start){ $('#repo').value = start; loadRepo(); }
 
+// On demande explicitement la vérification de mise à jour : sans elle, un navigateur qui a déjà
+// une version en cache peut resservir l'ancienne app pendant plusieurs chargements.
 if ('serviceWorker' in navigator)
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js')
+                                                 .then(reg => reg.update())
+                                                 .catch(()=>{}));
 </script>
 </body>
 </html>

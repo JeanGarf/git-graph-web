@@ -35,8 +35,61 @@ script tiers n'est chargé, et rien n'est envoyé ailleurs que vers `api.github.
 *fine-grained* limité à la lecture du contenu ne peut rien casser s'il fuite : révoquez-le et
 c'est fini. Évitez malgré tout un jeton classique à portée `repo`, qui donne l'écriture.
 
+## Reprendre un dépôt sans le saisir
+
+Tout dépôt qui s'ouvre sans erreur entre dans une liste de reprise, du plus récent au plus ancien
+(douze au maximum, réglable par `MAX_RECENTS`). Le chevron du champ de saisie ouvre cette liste :
+un clic sur une ligne recharge le dépôt, la croix l'en retire. Taper dans le champ restreint la
+liste à ce qui correspond.
+
+Elle vit dans le stockage local et ne coûte aucune requête. C'est aussi le seul moyen simple de
+mélanger des dépôts de **comptes GitHub différents** : un jeton *fine-grained* est rattaché à un
+seul propriétaire, donc aucun appel d'API ne saurait lister d'un coup les dépôts de plusieurs
+comptes. La liste, elle, retient des noms complets `proprietaire/depot` et s'en moque.
+
 Raccourci pratique : `https://…/couloirs/?repo=proprietaire/depot` ouvre directement un dépôt,
-ce qui fait un bon marque-page par projet.
+ce qui fait un bon marque-page par projet. L'application inscrit d'elle-même le dépôt affiché dans
+l'URL de l'onglet : chaque onglet garde donc son propre dépôt, et un rafraîchissement rejoue bien
+celui-là. Le jeton, lui, est partagé par tous les onglets du navigateur.
+
+## Refermer la feuille de détail
+
+Un commit touché ouvre une feuille par le bas. Elle se referme de quatre façons : le bouton
+**Retour** d'Android, un **glissement vers le bas** depuis la poignée (au-delà de `SHEET_CLOSE_PX`),
+un clic sur le fond assombri, ou la touche **Échap**.
+
+Pas de croix en haut à droite : Material réserve la croix aux boîtes de dialogue et recommande la
+poignée pour les feuilles du bas. Encore faut-il que la poignée tienne sa promesse — sinon le doigt
+glisse jusqu'au bord haut de l'écran et déclenche le « tirer pour rafraîchir ».
+
+Ce dernier reste actif sur l'écran principal ; il n'est confisqué que le temps d'une feuille
+ouverte, par `overscroll-behavior-y` sur `html`. Sur le seul `body`, la valeur n'est pas propagée
+au viewport et ne servirait à rien.
+
+## Couleurs des branches
+
+Dans le graphe, la couleur d'un commit vient du **couloir** où il tombe, pas de la branche : les
+couloirs sont recyclés dès qu'ils se libèrent, une même colonne changeant de branche au fil de
+l'historique. Le panneau de filtrage reprend cette même couleur pour chaque chip, celle du couloir
+occupé par la tête de la branche dans le graphe déjà dessiné. Une branche pas encore chargée, ou
+décochée, reste donc neutre : il n'y a encore rien à accorder.
+
+## Localiser une branche dans l'historique
+
+Chaque chip du panneau de filtrage porte un second bouton, un viseur : il referme le panneau et
+fait défiler l'historique jusqu'à la tête de cette branche, brièvement surlignée pour la repérer.
+Il ne s'agit pas du même clic que celui qui coche ou décoche la branche — les deux zones du chip
+sont indépendantes.
+
+Le viseur reste grisé tant que la branche n'a pas de couloir, c'est-à-dire tant qu'elle n'est pas
+encore dessinée dans le graphe : rien à atteindre pour une branche décochée ou pas encore chargée.
+
+## Détail d'un commit
+
+La feuille ouverte au clic sur un commit affiche son empreinte raccourcie (ligne « Commit »), les
+branches qui pointent directement sur lui (s'il y en a), l'auteur, la date et le ou les parents.
+L'empreinte et chaque nom de branche ont leur propre bouton de copie — le presse-papiers reçoit
+toujours la valeur complète, même quand l'affichage est raccourci.
 
 ## Comment le graphe est construit
 
@@ -73,12 +126,19 @@ case, aucune arête traversante.
 En tête de `index.html` :
 
 ```js
-const ROW = 54;        // hauteur d'une ligne, en pixels
+const ROW = 74;        // hauteur d'une ligne, en pixels
+const FIRST_LINE = 18; // hauteur de la première ligne (références ou titre), où tombe la pastille
 const PAD = 13;        // marge à gauche du premier couloir
 const DOT = 4.6;       // rayon des pastilles
 const MAX_GUTTER = 132;// largeur maximale réservée au graphe
 const COLORS = [...];  // palette cyclique des couloirs
 ```
+
+`ROW` doit rester assez grand pour le total des lignes que permet le CSS (trois lignes de titre,
+ou deux plus une ligne de références, via `-webkit-line-clamp`) plus la ligne de méta : toutes les
+lignes ont la même hauteur, fixe, car le graphe positionne chaque pastille à `r * ROW + FIRST_LINE / 2`
+— pas au centre de la ligne, mais sur le milieu de sa première ligne, références comprises quand
+il y en a.
 
 Les traits se resserrent quand les branches se multiplient, puis la colonne de texte cède du terrain.
 Au-delà d'une dizaine de branches simultanées, mieux vaut en décocher dans le sélecteur de branches.
