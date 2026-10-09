@@ -14,7 +14,7 @@
 :root{
   --bg:#0e131c; --panel:#161d2a; --panel2:#1c2534; --line:#25303f;
   --text:#dbe3ee; --dim:#8a99ad; --accent:#5b9cf5; --danger:#e06c60;
-  --row:54px; --gutter:120px;
+  --row:72px; --gutter:120px;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
   --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
 }
@@ -137,12 +137,15 @@ header{
 .commit.localise{animation:localise-flash 1.6s ease}
 @keyframes localise-flash{0%,100%{background:transparent}25%{background:var(--panel2)}}
 @media (prefers-reduced-motion:reduce){.commit.localise{animation:none;background:var(--panel2)}}
+/* Le titre s'étale sur trois lignes avant de tronquer, plutôt qu'une seule : ROW (en JS) est
+   dimensionné pour ces trois lignes plus la ligne de méta ci-dessous. */
 .commit .title{
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:14.5px;
+  display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; line-clamp:3;
+  overflow:hidden; font-size:14.5px; line-height:18px;
 }
 .commit .meta{
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  font-size:12px; color:var(--dim);
+  font-size:12px; line-height:15px; color:var(--dim);
 }
 .commit .meta .sha{font-family:var(--mono);font-size:11.5px;margin-right:7px}
 .refs{display:inline-flex;gap:4px;margin-right:6px;vertical-align:middle}
@@ -183,7 +186,17 @@ header{
 }
 .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px;margin-bottom:16px}
 .kv dt{color:var(--dim)}
-.kv dd{margin:0;font-family:var(--mono);font-size:12.5px;word-break:break-all}
+.kv dd{
+  margin:0;font-family:var(--mono);font-size:12.5px;word-break:break-all;
+  display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+}
+.copy{display:inline-flex;align-items:center;flex:none;padding:3px;border-radius:7px;color:var(--dim)}
+.copy svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.copy.copied{color:var(--accent)}
+.branch-pill{
+  display:inline-flex;align-items:center;gap:2px;padding:3px 3px 3px 9px;border-radius:99px;
+  border:1px solid currentColor;font-weight:600;
+}
 .sheet .btn{display:block;text-align:center;text-decoration:none;color:inherit}
 </style>
 </head>
@@ -268,13 +281,14 @@ header{
 "use strict";
 
 /* ===================== réglages visuels ===================== */
-const ROW = 54, PAD = 13, DOT = 4.6, MAX_GUTTER = 132, LANE_MAX = 18, LANE_MIN = 11;
+const ROW = 72, PAD = 13, DOT = 4.6, MAX_GUTTER = 132, LANE_MAX = 18, LANE_MIN = 11;
 const COLORS = ['#c02000','#ff8a01','#ddcd5d','#88b046','#1765a0','#5757ff','#8057ff','#8000c0'];
 const color = i => COLORS[i % COLORS.length];
 
 /* ===================== autres réglages ===================== */
 const MAX_RECENTS = 12;                 // dépôts retenus dans la liste de reprise
 const SHEET_CLOSE_PX = 90;              // glissement au-delà duquel la feuille de détail se ferme
+const SHEET_DRAG_PX = 6;                // mouvement avant qu'un tap ne devienne un glissement
 
 /* ===================== état ===================== */
 const S = {
@@ -740,6 +754,46 @@ function relDate(iso){
 }
 
 /* ===================== feuille de détail ===================== */
+
+//
+// Copie dans le presse-papiers
+//
+// Réutilisée pour le nom d'une branche comme pour l'empreinte complète d'un commit : même bouton,
+// même retour visuel bref (couleur et infobulle), sans dupliquer cette mécanique à chaque usage.
+//
+
+async function copyToClipboard(text, btn){
+  try{
+    await navigator.clipboard.writeText(text);
+
+    // La copie a réussi
+
+    // Le bouton se colore et son infobulle le confirme, puis tout redevient neutre
+    const titreInitial = btn.title;
+    btn.classList.add('copied');
+    btn.title = 'Copié !';
+    btn.setAttribute('aria-label', 'Copié !');
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      btn.title = titreInitial;
+      btn.setAttribute('aria-label', titreInitial);
+    }, 1200);
+
+  }catch(e){ /* Presse-papiers inaccessible : rien d'autre à faire que copier à la main */ }
+}
+
+function makeCopyButton(text, label){
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'copy';
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+  btn.innerHTML = '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/>'
+    + '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  btn.onclick = () => copyToClipboard(text, btn);
+  return btn;
+}
+
 function openSheet(sha){
   const c = S.commits.get(sha);
   if (!c) return;
@@ -750,7 +804,42 @@ function openSheet(sha){
     const dt = document.createElement('dt'), dd = document.createElement('dd');
     dt.textContent = k; dd.textContent = v; kv.append(dt, dd);
   };
-  add('Empreinte', c.sha);
+
+  // L'empreinte complète ne tient pas sur une ligne : on l'affiche raccourcie, avec un bouton
+  // pour la copier en entier
+  const dtSha = document.createElement('dt'), ddSha = document.createElement('dd');
+  dtSha.textContent = 'Empreinte';
+  const codeSha = document.createElement('span');
+  codeSha.textContent = c.sha.slice(0, 7);
+  ddSha.append(codeSha, makeCopyButton(c.sha, "Copier l'empreinte complète"));
+  kv.append(dtSha, ddSha);
+
+  const branches = (S.refs.get(sha) || []).filter(r => r.kind !== 'tag');
+  if (branches.length){
+    // Au moins une branche pointe directement sur ce commit
+
+    // Une pastille par branche, dans la couleur de son couloir, avec un bouton de copie chacune
+
+    const dt = document.createElement('dt'), dd = document.createElement('dd');
+    dt.textContent = branches.length > 1 ? 'Branches' : 'Branche';
+    const lane = S.laneOf.get(sha);
+    for (const b of branches){
+      const pill = document.createElement('span');
+      pill.className = 'branch-pill';
+      if (lane != null) pill.style.color = color(lane);
+      const name = document.createElement('span');
+      name.textContent = b.name;
+      pill.append(name, makeCopyButton(b.name, `Copier ${b.name}`));
+      dd.appendChild(pill);
+    }
+    kv.append(dt, dd);
+
+  } else {
+    // Aucune branche ne pointe directement sur ce commit
+
+    // Rien à ajouter : cette ligne n'a pas lieu d'apparaître dans la feuille
+  }
+
   add('Auteur', c.author);
   add('Date', new Date(c.date).toLocaleString('fr-FR'));
   add(c.parents.length > 1 ? 'Parents' : 'Parent', c.parents.map(p => p.slice(0,7)).join('  ') || '(commit racine)');
@@ -828,11 +917,11 @@ function beginSheetDrag(e){
   if (e.target.closest('#sheet-grip') || sheet.scrollTop === 0){
     // Le geste part de la poignée OU du haut d'un contenu qui n'a pas encore défilé
 
-    // Retenir le point de départ et suspendre la transition, la feuille suivra le doigt
+    // Retenir le point de départ, SANS capturer le pointeur tout de suite : un simple tap sur un
+    // bouton du contenu doit rester un clic normal, seul un vrai mouvement déclenchera le glissement
 
-    S.sheetDrag = { id:e.pointerId, y0:e.clientY, dy:0 };
-    sheet.classList.add('dragging');
-    sheet.setPointerCapture(e.pointerId);
+    S.sheetDrag = { id:e.pointerId, y0:e.clientY, dy:0, captured:false };
+
   } else {
     // Le geste part d'un contenu déjà défilé
 
@@ -845,10 +934,35 @@ function moveSheetDrag(e){
   if (drag && e.pointerId === drag.id){
     // Le doigt qui bouge est bien celui qui a saisi la feuille
 
-    // La feuille descend avec lui, mais ne remonte jamais au-dessus de sa position ouverte
-
+    const sheet = $('#sheet');
     drag.dy = Math.max(0, e.clientY - drag.y0);
-    $('#sheet').style.transform = `translateY(${drag.dy}px)`;
+
+    if (!drag.captured && drag.dy > SHEET_DRAG_PX){
+      // Le mouvement dépasse le seuil : ce n'est plus un tap, mais un glissement
+
+      // On capture le pointeur à partir de maintenant, et on suspend la transition
+      drag.captured = true;
+      sheet.classList.add('dragging');
+      sheet.setPointerCapture(e.pointerId);
+
+    } else {
+      // Le seuil n'est pas encore franchi OU le glissement est déjà capturé
+
+      // Rien à activer de plus ici
+    }
+
+    if (drag.captured){
+      // Le glissement est actif
+
+      // La feuille suit le doigt, mais ne remonte jamais au-dessus de sa position ouverte
+      sheet.style.transform = `translateY(${drag.dy}px)`;
+
+    } else {
+      // Le glissement n'est pas encore actif
+
+      // Rien à afficher : on attend de dépasser le seuil, ou le tap se terminera normalement
+    }
+
   } else {
     // Aucun glissement en cours OU un autre doigt sur l'écran
 
@@ -861,24 +975,34 @@ function endSheetDrag(e){
   if (drag && e.pointerId === drag.id){
     // Le doigt qui tenait la feuille quitte l'écran, ou le navigateur reprend le geste
 
-    // Rendre la main à la transition avant de trancher entre fermeture et retour en place
-
-    const sheet = $('#sheet');
     S.sheetDrag = null;
-    sheet.classList.remove('dragging');
-    sheet.style.transform = '';
 
-    if (e.type === 'pointerup' && drag.dy > SHEET_CLOSE_PX){
-      // Le geste s'est achevé au-delà de la distance de fermeture
+    if (drag.captured){
+      // Le glissement avait réellement commencé
 
-      // Refermer la feuille
-      closeSheet();
+      // Rendre la main à la transition avant de trancher entre fermeture et retour en place
+      const sheet = $('#sheet');
+      sheet.classList.remove('dragging');
+      sheet.style.transform = '';
+
+      if (e.type === 'pointerup' && drag.dy > SHEET_CLOSE_PX){
+        // Le geste s'est achevé au-delà de la distance de fermeture
+
+        // Refermer la feuille
+        closeSheet();
+
+      } else {
+        // Le geste est resté trop court OU le navigateur l'a interrompu
+
+        // Laisser la transition ramener la feuille à sa place
+      }
 
     } else {
-      // Le geste est resté trop court OU le navigateur l'a interrompu
+      // Le glissement n'avait jamais démarré : c'était un simple tap
 
-      // Laisser la transition ramener la feuille à sa place
+      // Rien à défaire : le clic sous-jacent se déroule normalement
     }
+
   } else {
     // Aucun glissement en cours OU un autre doigt
 
