@@ -74,8 +74,10 @@ header{
   height:38px; min-width:38px; display:grid; place-items:center;
   border:1px solid var(--line); border-radius:9px; background:var(--panel); color:var(--dim);
 }
-/* Pastille du bouton de filtrage : allumée dès qu'une branche est masquée */
-#toggle-branches[data-filtered]::after{
+/* Pastille du bouton de filtrage (allumée dès qu'une branche est masquée) et du bouton de recherche
+   (allumée tant qu'un terme est saisi) */
+#toggle-branches[data-filtered]::after,
+#toggle-search[data-active]::after{
   content:''; position:absolute; top:-3px; right:-3px; width:9px; height:9px;
   border-radius:99px; background:var(--accent); box-shadow:0 0 0 2px var(--bg);
 }
@@ -111,6 +113,21 @@ header{
 .chip-locate{display:inline-flex;align-items:center;padding:6px 10px 6px 5px;color:inherit;opacity:.55}
 .chip-locate:disabled{opacity:.22}
 .chip-locate svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+/* Panneau de recherche : le bouton « Effacer » remplace le × natif du champ */
+#search-input::-webkit-search-cancel-button{display:none}
+.scopes{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.scope{
+  padding:6px 12px;border-radius:99px;border:1px solid var(--line);background:var(--bg);
+  font-size:13px;color:var(--dim);
+}
+.scope[aria-pressed="true"]{color:var(--text);border-color:var(--accent)}
+.search-nav{display:flex;align-items:center;gap:8px}
+.search-nav .btn{padding:6px 10px;display:grid;place-items:center}
+.search-nav svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.search-nav .btn:disabled{opacity:.4}
+#search-count{flex:1;font-size:13px;color:var(--dim)}
+.search-hint{margin:8px 0 0;font-size:12.5px;color:var(--dim)}
+.search-hint[hidden]{display:none}
 .drawer-actions{display:flex;gap:8px;flex-wrap:wrap}
 .btn{border:1px solid var(--line);border-radius:9px;padding:8px 12px;font-size:14px;background:var(--bg)}
 .btn.primary{background:var(--accent);color:#fff;border-color:transparent;font-weight:600}
@@ -136,6 +153,10 @@ header{
   justify-content:flex-start; gap:2px; overflow:hidden; cursor:pointer;
 }
 .commit:active{background:var(--panel)}
+/* Résultats de la recherche : tous surlignés, le courant marqué d'un liseré */
+.commit.trouve{background:var(--panel2)}
+.commit.courant{box-shadow:inset 3px 0 0 var(--accent)}
+mark{background:rgba(255,196,0,.4);color:inherit;border-radius:2px}
 /* Bref surlignage du commit atteint depuis le panneau de filtrage */
 .commit.localise{animation:localise-flash 1.6s ease}
 @keyframes localise-flash{0%,100%{background:transparent}25%{background:var(--panel2)}}
@@ -226,6 +247,9 @@ header{
     <button class="icon-btn" id="load" aria-label="Ouvrir" title="Ouvrir">
       <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.4-6.4L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.4 6.4L3 16"/><path d="M3 21v-5h5"/></svg>
     </button>
+    <button class="icon-btn" id="toggle-search" aria-pressed="false" aria-label="Rechercher" title="Rechercher">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/></svg>
+    </button>
     <button class="icon-btn" id="toggle-branches" aria-pressed="false" aria-label="Filtrer les branches" title="Filtrer les branches">
       <svg viewBox="0 0 24 24"><path d="M21 4H3l7.2 8.5V19l3.6 1.8v-8.3L21 4z"/></svg>
     </button>
@@ -247,6 +271,30 @@ header{
       <button class="btn" id="clear-token">Supprimer le jeton</button>
       <a class="btn" href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Créer un jeton</a>
     </div>
+  </section>
+
+  <section class="drawer" id="drawer-search">
+    <h2>Rechercher dans l'historique affiché</h2>
+    <div class="token-row">
+      <input id="search-input" type="search" inputmode="search" autocomplete="off" autocapitalize="off"
+             autocorrect="off" spellcheck="false" placeholder="Branche, message, auteur…" aria-label="Rechercher">
+      <button class="btn" id="search-clear">Effacer</button>
+    </div>
+    <div class="scopes" id="search-scopes" role="group" aria-label="Où chercher">
+      <button class="scope" type="button" data-scope="branch" aria-pressed="true">Branche</button>
+      <button class="scope" type="button" data-scope="message" aria-pressed="true">Message</button>
+      <button class="scope" type="button" data-scope="author" aria-pressed="true">Auteur</button>
+    </div>
+    <div class="search-nav">
+      <button class="btn" id="search-prev" type="button" aria-label="Résultat précédent" title="Précédent" disabled>
+        <svg viewBox="0 0 24 24"><path d="M7 14l5-5 5 5"/></svg>
+      </button>
+      <button class="btn" id="search-next" type="button" aria-label="Résultat suivant" title="Suivant" disabled>
+        <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></svg>
+      </button>
+      <span id="search-count" aria-live="polite"></span>
+    </div>
+    <p class="search-hint" id="search-hint" hidden></p>
   </section>
 
   <section class="drawer" id="drawer-branches">
@@ -305,7 +353,9 @@ const SHEET_DRAG_PX = 6;                // mouvement avant qu'un tap ne devienne
 const S = {
   owner:'', repo:'', token:'', depth:100,
   branches:[], selected:new Set(), refs:new Map(), commits:new Map(), order:[], busy:false,
-  statusTimer:null, sheetDrag:null, sheetBack:false, laneOf:new Map()
+  statusTimer:null, sheetDrag:null, sheetBack:false, laneOf:new Map(),
+  search:{ query:'', q:'', scope:{ branch:true, message:true, author:true },
+           hits:[], current:-1, hidden:[], timer:null }
 };
 const $ = s => document.querySelector(s);
 // Les attributs de présentation SVG n'acceptent pas var() partout : on lit la couleur réelle.
@@ -575,6 +625,9 @@ async function loadRepo({keepBranches=false} = {}){
     // recolore à son tour, sur ces couleurs-là plutôt que sur celles du chargement précédent
     renderBranchPicker();
 
+    // L'historique a changé : les résultats de la recherche se recalculent, sans faire défiler
+    runSearch(false, false);
+
     // Le dépôt s'est chargé pour de bon : il rejoint la liste de reprise
     pushRecent(S.owner + '/' + S.repo);
 
@@ -723,14 +776,22 @@ function draw(){
 
     const title = document.createElement('div');
     title.className = 'title' + (refsEl ? ' with-refs' : '');
-    title.appendChild(document.createTextNode(c.title || '(sans message)'));
+
+    // Le texte du titre vit dans un span : le surlignage de la recherche y insère des <mark>, ce que
+    // le -webkit-box du titre ne supporterait pas comme enfants directs (ils s'empileraient)
+    const titleText = document.createElement('span');
+    titleText.textContent = c.title || '(sans message)';
+    title.appendChild(titleText);
 
     const meta = document.createElement('div');
     meta.className = 'meta';
     const sha = document.createElement('span');
     sha.className = 'sha';
     sha.textContent = c.sha.slice(0, 7);
-    meta.append(sha, document.createTextNode(`${c.author} · ${relDate(c.date)}`));
+    const author = document.createElement('span');
+    author.className = 'author';
+    author.textContent = c.author;
+    meta.append(sha, author, document.createTextNode(` · ${relDate(c.date)}`));
 
     if (refsEl) li.appendChild(refsEl);
     li.append(title, meta);
@@ -791,6 +852,9 @@ function draw(){
       frag.appendChild(node('circle', { cx:x, cy:y, r:DOT - 2, fill:bgColor() }));
   });
   svg.appendChild(frag);
+
+  // Les lignes viennent d'être reconstruites : on y repeint les résultats de la recherche
+  paintSearch();
 }
 
 function relDate(iso){
@@ -800,6 +864,156 @@ function relDate(iso){
   if (s < 86400) return `il y a ${Math.floor(s/3600)} h`;
   if (s < 86400*30) return `il y a ${Math.floor(s/86400)} j`;
   return d.toLocaleDateString('fr-FR', { day:'numeric', month:'short', year:'2-digit' });
+}
+
+/* ===================== recherche ===================== */
+
+//
+// Normalisation
+//
+// On cherche sans tenir compte de la casse ni des accents. Les positions d'origine sont conservées
+// (from/to) pour que le surlignage retombe sur le texte tel qu'il est affiché.
+//
+
+function normText(text){
+  let s = '';
+  const from = [], to = [];
+  for (let i = 0; i < text.length;){
+    const ch = String.fromCodePoint(text.codePointAt(i));
+    const next = i + ch.length;
+    const n = ch.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+    for (let k = 0; k < n.length; k++){ from.push(i); to.push(next); }
+    s += n;
+    i = next;
+  }
+  return { s, from, to };
+}
+
+// Découpe un texte en tronçons, marqués ou non selon qu'ils correspondent à la recherche
+function splitMatches(text, q){
+  const flags = new Array(text.length).fill(false);
+  if (q){
+    const { s, from, to } = normText(text);
+    for (let at = s.indexOf(q); at !== -1; at = s.indexOf(q, at + q.length))
+      flags.fill(true, from[at], to[at + q.length - 1]);
+  }
+  const parts = [];
+  for (let i = 0; i < text.length; i++){
+    const last = parts[parts.length - 1];
+    if (last && last.mark === flags[i]) last.text += text[i];
+    else parts.push({ text:text[i], mark:flags[i] });
+  }
+  return parts;
+}
+
+// Remplit un élément avec un texte dont les correspondances sont entourées de <mark>
+function appendHighlighted(el, text, q){
+  for (const part of splitMatches(text, q)){
+    if (part.mark){
+      const m = document.createElement('mark');
+      m.textContent = part.text;
+      el.appendChild(m);
+    } else {
+      el.appendChild(document.createTextNode(part.text));
+    }
+  }
+}
+
+// Surligne en place le texte d'un élément (sans toucher au reste s'il n'y a rien à changer)
+function highlight(el, q){
+  if (el && (q || el.querySelector('mark'))){
+    const text = el.textContent;
+    el.textContent = '';
+    appendHighlighted(el, text, q);
+  }
+}
+
+//
+// Recherche
+//
+
+function branchNames(sha){
+  return (S.refs.get(sha) || []).filter(r => r.kind !== 'tag').map(r => r.name);
+}
+
+// Un commit correspond si le terme figure dans l'un des champs cochés. Le message est lu en entier,
+// corps compris, même si la liste n'en montre que le titre.
+function commitMatches(c, q){
+  const { scope } = S.search;
+  const has = text => normText(text).s.includes(q);
+  return (scope.message && has(c.message))
+      || (scope.author && has(c.author))
+      || (scope.branch && branchNames(c.sha).some(has));
+}
+
+function runSearch(reset, scroll){
+  const s = S.search;
+  s.q = normText(s.query.trim()).s;
+  s.hits = s.q ? S.order.filter(c => commitMatches(c, s.q)).map(c => c.sha) : [];
+
+  // Les noms de branches couvrent tout le dépôt, y compris celles qui ne sont pas affichées : on
+  // les signale, faute de commit à surligner
+  s.hidden = (s.q && s.scope.branch)
+    ? S.branches.filter(b => !S.selected.has(b.name) && normText(b.name).s.includes(s.q)).map(b => b.name)
+    : [];
+
+  s.current = s.hits.length ? (reset ? 0 : Math.min(Math.max(s.current, 0), s.hits.length - 1)) : -1;
+  paintSearch();
+  updateSearchUi();
+  if (scroll && s.current >= 0) scrollToCurrent();
+}
+
+// Le résultat courant porte un liseré, les autres seulement le fond
+function paintCurrent(){
+  const s = S.search;
+  for (const li of $('#rows').children)
+    li.classList.toggle('courant', s.current >= 0 && li.dataset.sha === s.hits[s.current]);
+}
+
+function paintSearch(){
+  const s = S.search, found = new Set(s.hits);
+  const qTitle = s.scope.message ? s.q : '';
+  const qAuthor = s.scope.author ? s.q : '';
+  const qBranch = s.scope.branch ? s.q : '';
+  for (const li of $('#rows').children){
+    li.classList.toggle('trouve', found.has(li.dataset.sha));
+    highlight(li.querySelector('.title span'), qTitle);
+    highlight(li.querySelector('.author'), qAuthor);
+    for (const ref of li.querySelectorAll('.ref:not(.tag)')) highlight(ref, qBranch);
+  }
+  paintCurrent();
+}
+
+function scrollToCurrent(){
+  const s = S.search;
+  const li = $('#rows').querySelector(`li[data-sha="${s.hits[s.current]}"]`);
+  if (li) li.scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+function stepHit(delta){
+  const s = S.search, n = s.hits.length;
+  if (n){
+    s.current = (s.current + delta + n) % n;
+    paintCurrent();
+    updateSearchUi();
+    scrollToCurrent();
+  }
+}
+
+function updateSearchUi(){
+  const s = S.search, active = s.q !== '';
+  $('#search-count').textContent = !active ? ''
+    : s.hits.length ? `${s.current + 1} / ${s.hits.length}` : 'Aucun résultat';
+  $('#search-prev').disabled = $('#search-next').disabled = s.hits.length === 0;
+
+  const hint = $('#search-hint');
+  hint.hidden = s.hidden.length === 0;
+  hint.textContent = s.hidden.length ? 'Branches correspondantes non affichées : ' + s.hidden.join(', ') : '';
+
+  // Le bouton de la barre garde une pastille tant qu'un terme est actif, panneau fermé ou non
+  const btn = $('#toggle-search');
+  if (active) btn.dataset.active = 'oui';
+  else delete btn.dataset.active;
 }
 
 /* ===================== feuille de détail ===================== */
@@ -877,7 +1091,9 @@ function openSheet(sha){
     refsEl.hidden = true;
   }
 
-  $('#sheet-msg').textContent = c.message || '(sans message)';
+  const msgEl = $('#sheet-msg');
+  msgEl.textContent = '';
+  appendHighlighted(msgEl, c.message || '(sans message)', S.search.scope.message ? S.search.q : '');
   const kv = $('#sheet-kv');
   kv.textContent = '';
   const add = (k, v) => {
@@ -1071,6 +1287,7 @@ function openDrawer(which, force){
   el.classList.toggle('open', open);
   btn.setAttribute('aria-pressed', String(open));
   if (open && which === 'token') $('#token').focus();
+  if (open && which === 'search') $('#search-input').focus();
 }
 
 // Le bouton de filtrage porte une pastille dès qu'une branche est masquée, et son infobulle donne
@@ -1238,6 +1455,39 @@ document.addEventListener('click', e => { if (!e.target.closest('.repo-field')) 
 $('#more').onclick = () => { S.depth += 100; loadRepo({keepBranches:true}); };
 $('#toggle-token').onclick = () => openDrawer('token');
 $('#toggle-branches').onclick = () => openDrawer('branches');
+$('#toggle-search').onclick = () => openDrawer('search');
+
+// La saisie relance la recherche après une courte pause, pour ne pas la refaire à chaque lettre
+$('#search-input').addEventListener('input', e => {
+  clearTimeout(S.search.timer);
+  S.search.timer = setTimeout(() => { S.search.query = e.target.value; runSearch(true, true); }, 150);
+});
+$('#search-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter'){ e.preventDefault(); stepHit(e.shiftKey ? -1 : 1); }
+});
+$('#search-prev').onclick = () => stepHit(-1);
+$('#search-next').onclick = () => stepHit(1);
+$('#search-clear').onclick = () => {
+  clearTimeout(S.search.timer);
+  $('#search-input').value = '';
+  S.search.query = '';
+  runSearch(true, false);
+  $('#search-input').focus();
+};
+
+// Chaque pastille bascule un champ de recherche ; au moins un doit rester actif
+$('#search-scopes').addEventListener('click', e => {
+  const btn = e.target.closest('.scope');
+  if (btn){
+    const scope = S.search.scope, key = btn.dataset.scope;
+    const others = Object.keys(scope).filter(k => k !== key && scope[k]).length;
+    if (!scope[key] || others > 0){
+      scope[key] = !scope[key];
+      btn.setAttribute('aria-pressed', String(scope[key]));
+      runSearch(true, true);
+    }
+  }
+});
 $('#save-token').onclick = () => {
   S.token = $('#token').value.trim();
   LS.set('token', S.token || null);

@@ -92,6 +92,24 @@ pointent directement sur lui (s'il y en a), puis le message, puis son empreinte 
 propre bouton de copie — le presse-papiers reçoit toujours la valeur complète, même quand
 l'affichage est raccourci.
 
+## Rechercher dans l'historique
+
+La loupe de la barre haute ouvre un panneau de recherche. On y tape un terme, on choisit où il est
+cherché — **Branche**, **Message**, **Auteur**, tous actifs par défaut, au moins un doit rester
+coché — et les commits correspondants sont surlignés dans le graphe, le terme lui-même étant marqué
+en jaune. Les flèches (ou Entrée / Maj+Entrée dans le champ) passent d'un résultat à l'autre en
+faisant défiler la liste ; le compteur indique « 3 / 12 ». La loupe garde une pastille tant qu'un
+terme est actif, panneau fermé ou non.
+
+- La casse et les accents sont ignorés : « ELEGANT » trouve « élégant ».
+- « Message » couvre le message en entier, corps compris. La liste n'en montre que le titre : un mot
+  qui ne figure que dans le corps désigne donc un commit sans rien de surligné dans la liste, et il
+  apparaît marqué en ouvrant la feuille de détail.
+- La recherche porte sur l'historique **déjà chargé** : les commits affichés, plus ceux ajoutés par
+  « Charger 100 commits de plus ». Elle ne coûte aucune requête.
+- Un nom de branche correspond au commit de tête de cette branche. Les branches non affichées (le
+  filtre en masque) n'ont pas de commit à surligner : elles sont seulement nommées sous le compteur.
+
 ## Comment le graphe est construit
 
 Trois étapes, toutes côté navigateur.
