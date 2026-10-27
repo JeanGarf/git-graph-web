@@ -349,6 +349,12 @@ const MAX_RECENTS = 12;                 // dépôts retenus dans la liste de rep
 const SHEET_CLOSE_PX = 90;              // glissement au-delà duquel la feuille de détail se ferme
 const SHEET_DRAG_PX = 6;                // mouvement avant qu'un tap ne devienne un glissement
 
+// Lettres que Unicode ne décompose pas en « lettre + accent » : la recherche les replie à la main,
+// pour que « coeur » trouve « cœur », et l'apostrophe droite l'apostrophe typographique
+const FOLD = { 'œ':'oe', 'æ':'ae', 'ß':'ss', 'ø':'o', 'ł':'l', 'đ':'d', 'ð':'d', 'þ':'th', 'ı':'i',
+               '’':"'", '‘':"'", 'ʼ':"'" };
+const FOLD_RE = new RegExp('[' + Object.keys(FOLD).join('') + ']', 'g');
+
 /* ===================== état ===================== */
 const S = {
   owner:'', repo:'', token:'', depth:100,
@@ -871,8 +877,9 @@ function relDate(iso){
 //
 // Normalisation
 //
-// On cherche sans tenir compte de la casse ni des accents. Les positions d'origine sont conservées
-// (from/to) pour que le surlignage retombe sur le texte tel qu'il est affiché.
+// On cherche sans tenir compte de la casse ni des accents (voir FOLD pour les lettres que la
+// décomposition Unicode ne couvre pas, comme œ). Un caractère peut donner plusieurs lettres : les
+// positions d'origine sont conservées (from/to) pour que le surlignage retombe sur le texte affiché.
 //
 
 function normText(text){
@@ -881,7 +888,7 @@ function normText(text){
   for (let i = 0; i < text.length;){
     const ch = String.fromCodePoint(text.codePointAt(i));
     const next = i + ch.length;
-    const n = ch.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+    const n = ch.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(FOLD_RE, c => FOLD[c]);
     for (let k = 0; k < n.length; k++){ from.push(i); to.push(next); }
     s += n;
     i = next;

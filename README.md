@@ -101,7 +101,9 @@ en jaune. Les flèches (ou Entrée / Maj+Entrée dans le champ) passent d'un ré
 faisant défiler la liste ; le compteur indique « 3 / 12 ». La loupe garde une pastille tant qu'un
 terme est actif, panneau fermé ou non.
 
-- La casse et les accents sont ignorés : « ELEGANT » trouve « élégant ».
+- La casse et les accents sont ignorés : « ELEGANT » trouve « élégant ». Les lettres que Unicode ne
+  décompose pas en « lettre + accent » sont repliées à la main (table `FOLD`) : « coeur » trouve
+  « cœur », « strasse » trouve « Straße », et l'apostrophe droite vaut l'apostrophe typographique.
 - « Message » couvre le message en entier, corps compris. La liste n'en montre que le titre : un mot
   qui ne figure que dans le corps désigne donc un commit sans rien de surligné dans la liste, et il
   apparaît marqué en ouvrant la feuille de détail.
