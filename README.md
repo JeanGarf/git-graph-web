@@ -28,7 +28,8 @@ Pour vos dépôts privés — et pour passer à 5 000 requêtes par heure :
 2. **Repository access** → *Only select repositories* → `patrius-game`, `Patrius-MCP`, `feedback-widget-js`
 3. **Permissions → Repository permissions → Contents : Read-only** (c'est la seule nécessaire ;
    *Metadata: Read* s'ajoute tout seul)
-4. Collez le jeton derrière l'icône de clé dans l'application.
+4. Collez le jeton dans l'application : chevron du champ de dépôt, puis « Jeton d'accès… » en bas de
+   la liste. Le panneau s'ouvre aussi de lui-même quand GitHub refuse l'accès.
 
 Le jeton reste dans le `localStorage` de ce navigateur. Il n'y a pas de serveur intermédiaire, aucun
 script tiers n'est chargé, et rien n'est envoyé ailleurs que vers `api.github.com`. Un jeton
@@ -40,7 +41,13 @@ c'est fini. Évitez malgré tout un jeton classique à portée `repo`, qui donne
 Tout dépôt qui s'ouvre sans erreur entre dans une liste de reprise, du plus récent au plus ancien
 (douze au maximum, réglable par `MAX_RECENTS`). Le chevron du champ de saisie ouvre cette liste :
 un clic sur une ligne recharge le dépôt, la croix l'en retire. Taper dans le champ restreint la
-liste à ce qui correspond.
+liste à ce qui correspond. Elle s'étale sur toute la largeur de la barre, pour que les noms y
+tiennent en entier, et se termine par l'accès au jeton, qui sert trop rarement pour occuper un
+bouton de la barre.
+
+Hors saisie, le champ montre la fin du nom quand celui-ci est trop long pour la place disponible
+(`…anGarf/feedback-widget-js`) : c'est le nom du dépôt qui distingue un projet d'un autre, pas le
+compte. La valeur reste `compte/depot`, et tout redevient normal dès qu'on touche le champ.
 
 Elle vit dans le stockage local et ne coûte aucune requête. C'est aussi le seul moyen simple de
 mélanger des dépôts de **comptes GitHub différents** : un jeton *fine-grained* est rattaché à un
