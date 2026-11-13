@@ -13,14 +13,14 @@
 <style>
 :root{
   --bg:#0e131c; --panel:#161d2a; --panel2:#1c2534; --line:#25303f;
-  --text:#dbe3ee; --dim:#8a99ad; --accent:#5b9cf5; --danger:#e06c60;
+  --text:#dbe3ee; --dim:#8a99ad; --accent:#5b9cf5; --danger:#e06c60; --new:#3fb950;
   --row-gap:12px; --gutter:120px;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
   --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Roboto Mono",monospace;
 }
 @media (prefers-color-scheme: light){
   :root{ --bg:#f7f8fa; --panel:#ffffff; --panel2:#eef1f5; --line:#e0e5ec;
-         --text:#1b2432; --dim:#6a788c; --accent:#1f6feb; }
+         --text:#1b2432; --dim:#6a788c; --accent:#1f6feb; --new:#1a7f37; }
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
@@ -142,7 +142,9 @@ header{
 .btn.primary{background:var(--accent);color:#fff;border-color:transparent;font-weight:600}
 
 /* ---------- statut ---------- */
-.status{padding:10px 14px;font-size:13px;color:var(--dim);display:flex;gap:8px;align-items:center}
+/* Il vit dans la barre haute, collante : il reste visible quand on est descendu dans l'historique.
+   Le retrait horizontal complète celui de la barre (12px) pour s'aligner sur les commits. */
+.status{padding:10px 2px;font-size:13px;color:var(--dim);display:flex;gap:8px;align-items:center}
 /* Sans cela, le display:flex ci-dessus l'emporte sur l'attribut hidden et laisse une bande vide */
 .status[hidden]{display:none}
 .status.error{color:var(--danger)}
@@ -182,6 +184,11 @@ mark{background:rgba(255,196,0,.4);color:inherit;border-radius:2px}
   font-size:12px; line-height:15px; color:var(--dim);
 }
 .commit .meta .sha{font-family:var(--mono);font-size:11.5px;margin-right:7px}
+/* Commit apparu au dernier rafraîchissement : la marque reste jusqu'au rafraîchissement suivant */
+.nouveau-badge{
+  font-size:10.5px; font-weight:600; color:var(--new); border:1px solid currentColor;
+  border-radius:99px; padding:0 6px; margin-right:7px;
+}
 /* Ligne de références au-dessus du titre, et non plus en préfixe dans son texte : sa hauteur
    (line-height) doit égaler celle d'une ligne de titre pour que la pastille s'aligne dans les
    deux cas, avec ou sans référence. */
@@ -312,11 +319,11 @@ mark{background:rgba(255,196,0,.4);color:inherit;border-radius:2px}
       <button class="btn" id="none-branches">Aucune</button>
     </div>
   </section>
+
+  <div class="status" id="status" hidden></div>
 </header>
 
 <div class="preprod-banner" id="preprod-banner" hidden>PRÉ-PRODUCTION</div>
-
-<div class="status" id="status" hidden></div>
 
 <main>
   <div id="graph">
@@ -354,6 +361,9 @@ const color = i => COLORS[i % COLORS.length];
 const MAX_RECENTS = 12;                 // dépôts retenus dans la liste de reprise
 const SHEET_CLOSE_PX = 90;              // glissement au-delà duquel la feuille de détail se ferme
 const SHEET_DRAG_PX = 6;                // mouvement avant qu'un tap ne devienne un glissement
+const STATUS_MS = 2600;                 // durée d'affichage d'un message de statut ordinaire
+const CHANGES_STATUS_MS = 8000;         // durée d'affichage du résumé des nouveautés
+const MAX_NAMES = 3;                    // branches nommées au plus dans ce résumé
 
 // Lettres que Unicode ne décompose pas en « lettre + accent » : la recherche les replie à la main,
 // pour que « coeur » trouve « cœur », et l'apostrophe droite l'apostrophe typographique
@@ -366,16 +376,25 @@ const S = {
   owner:'', repo:'', token:'', depth:100,
   branches:[], selected:new Set(), refs:new Map(), commits:new Map(), order:[], busy:false,
   statusTimer:null, sheetDrag:null, sheetBack:false, laneOf:new Map(),
+  shown:'', nouveaux:new Set(),
   search:{ query:'', q:'', scope:{ branch:true, message:true, author:true },
            hits:[], current:-1, hidden:[], timer:null }
 };
 const $ = s => document.querySelector(s);
 // Les attributs de présentation SVG n'acceptent pas var() partout : on lit la couleur réelle.
 const bgColor = () => getComputedStyle(document.body).backgroundColor || '#0e131c';
-const LS = {
-  get:(k,d)=>{ try{ return localStorage.getItem('gl.'+k) ?? d; }catch(e){ return d; } },
-  set:(k,v)=>{ try{ v==null ? localStorage.removeItem('gl.'+k) : localStorage.setItem('gl.'+k,v); }catch(e){} }
-};
+// Accès protégé à un stockage du navigateur : il peut être absent, plein ou interdit (navigation
+// privée). Une écriture refusée efface l'ancienne valeur plutôt que de la laisser périmer.
+const makeStore = area => ({
+  get:(k,d)=>{ try{ return area().getItem('gl.'+k) ?? d; }catch(e){ return d; } },
+  set:(k,v)=>{ try{ v==null ? area().removeItem('gl.'+k) : area().setItem('gl.'+k,v); }
+               catch(e){ try{ area().removeItem('gl.'+k); }catch(e2){} } }
+});
+const LS = makeStore(() => localStorage);
+
+// Le stockage de session survit au rechargement de la page (le « tirer pour rafraîchir »
+// d'Android), mais reste propre à l'onglet
+const SS = makeStore(() => sessionStorage);
 
 /* ===================== API GitHub ===================== */
 class GhError extends Error{ constructor(status,msg){ super(msg); this.status=status; } }
@@ -529,8 +548,7 @@ function makeRecentPick(nom){
     $('#repo').value = nom;
     showRepoEnd();
     hideRecents();
-    S.depth = 100;
-    loadRepo();
+    requestLoad();
   };
 
   return btn;
@@ -580,13 +598,48 @@ function needsToken(err){
   return err.status === 401 || (denied && !S.token);
 }
 
-async function loadRepo({keepBranches=false} = {}){
-  if (S.busy) return;
-  const raw = $('#repo').value.trim()
+// Lit « proprietaire/depot » dans une saisie, qu'elle soit une URL GitHub ou un simple nom
+function parseRepo(saisie){
+  const raw = saisie.trim()
     .replace(/^https?:\/\/(www\.)?github\.com\//i,'').replace(/\.git$/,'').replace(/^\/|\/$/g,'');
   const m = raw.match(/^([\w.-]+)\/([\w.-]+)/);
-  if (!m){ setStatus("Format attendu : proprietaire/depot", true); return; }
-  S.owner = m[1]; S.repo = m[2];
+  return m ? { owner:m[1], repo:m[2] } : null;
+}
+
+// Clé d'un dépôt pour les comparaisons : GitHub ignore la casse des noms
+const repoKey = r => (r.owner + '/' + r.repo).toLowerCase();
+
+// Le bouton de chargement, la touche Entrée et la liste de reprise passent par ici : redemander le
+// dépôt déjà affiché, c'est le rafraîchir, sans perdre ce qu'on regardait
+function requestLoad(){
+  const cible = parseRepo($('#repo').value);
+  if (cible && repoKey(cible) === S.shown){
+    // Le dépôt demandé est celui qui est déjà affiché
+
+    // Le rafraîchir en gardant la profondeur et les branches choisies, et marquer les nouveautés
+    loadRepo({ keepBranches:true, refresh:true });
+
+  } else {
+    // Aucun dépôt n'est affiché OU on en demande un autre OU la saisie est invalide
+
+    // Repartir des 100 derniers commits ; loadRepo signale lui-même une saisie invalide
+
+    S.depth = 100;
+    loadRepo();
+  }
+}
+
+async function loadRepo({keepBranches=false, refresh=false} = {}){
+  if (S.busy) return;
+  const cible = parseRepo($('#repo').value);
+  if (!cible){ setStatus("Format attendu : proprietaire/depot", true); return; }
+  S.owner = cible.owner; S.repo = cible.repo;
+
+  // Le dépôt affiché reste à l'écran pendant toute la lecture ; on note s'il s'agit du même
+  const memeDepot = repoKey(cible) === S.shown;
+
+  // Un rafraîchissement compare le nouvel historique à l'ancien : on en garde l'empreinte
+  const prev = refresh && memeDepot ? historyKeys() : null;
 
   // Cet onglet suit désormais ce dépôt : on le note dans son URL
   rememberRepo(S.owner + '/' + S.repo);
@@ -605,11 +658,14 @@ async function loadRepo({keepBranches=false} = {}){
                         : a.name.localeCompare(b.name,'fr'));
     S.branches = branches;
 
+    // Les branches créées depuis l'affichage précédent font partie des nouveautés : elles s'affichent
+    const created = prev ? branches.filter(b => !prev.heads.has(b.name)).map(b => b.name) : [];
+
     if (!keepBranches || S.selected.size === 0){
       S.selected = new Set(branches.slice(0, 12).map(b => b.name));
       S.selected.add(info.default_branch);
     } else {
-      S.selected = new Set([...S.selected].filter(n => branches.some(b => b.name === n)));
+      S.selected = new Set([...S.selected, ...created].filter(n => branches.some(b => b.name === n)));
       if (!S.selected.size) S.selected.add(info.default_branch);
     }
     renderBranchPicker();
@@ -654,10 +710,39 @@ async function loadRepo({keepBranches=false} = {}){
       for (const t of tags) if (commits.has(t.commit.sha)) addRef(t.commit.sha, t.name, 'tag');
     }catch(e){ /* les étiquettes sont facultatives */ }
 
+    // Les marques « nouveau » ne changent qu'au rafraîchissement ; entre deux, elles suivent les
+    // commits encore affichés
+
+    const changes = prev ? diffHistory(prev, branches, commits, created) : null;
+    if (changes){
+      // Le même dépôt vient d'être relu pour un rafraîchissement
+
+      // Les commits inconnus de l'affichage précédent deviennent les nouveautés
+      S.nouveaux = changes.nouveaux;
+
+    } else if (memeDepot){
+      // Le même dépôt a été relu pour plus de profondeur OU pour d'autres branches
+
+      // Garder les marques des commits toujours présents
+      S.nouveaux = new Set([...S.nouveaux].filter(sha => commits.has(sha)));
+
+    } else {
+      // Un autre dépôt s'ouvre
+
+      // Repartir sans marque, et du haut de son historique
+
+      S.nouveaux = new Set();
+      window.scrollTo(0, 0);
+    }
+
     S.commits = commits;
     S.refs = refs;
     S.order = topoOrder(commits);
     draw();
+    S.shown = repoKey(cible);
+
+    // L'onglet garde ce qu'il affiche : après un rechargement de la page, il le remontre aussitôt
+    saveSnapshot();
 
     // Les couloirs ne sont connus qu'une fois le graphe dessiné : le panneau de filtrage se
     // recolore à son tour, sur ces couleurs-là plutôt que sur celles du chargement précédent
@@ -669,8 +754,13 @@ async function loadRepo({keepBranches=false} = {}){
     // Le dépôt s'est chargé pour de bon : il rejoint la liste de reprise
     pushRecent(S.owner + '/' + S.repo);
 
-    setStatus(`${S.order.length} commits sur ${chosen.length} branche${chosen.length>1?'s':''}`);
-    S.statusTimer = setTimeout(()=>setStatus(null), 2600);
+    // Le statut résume les nouveautés d'un rafraîchissement, ou sinon la taille de l'historique.
+    // La lecture est finie : le message ne porte plus le spinner, qui ferait croire le contraire.
+
+    S.busy = false;
+    setStatus(changes ? describeChanges(changes)
+                      : `${S.order.length} commits sur ${chosen.length} branche${chosen.length>1?'s':''}`);
+    S.statusTimer = setTimeout(() => setStatus(null), changes ? CHANGES_STATUS_MS : STATUS_MS);
   } catch(err){
 
     // Afficher l'erreur, et n'ouvrir le tiroir du jeton que s'il peut y remédier
@@ -680,6 +770,147 @@ async function loadRepo({keepBranches=false} = {}){
 
   } finally {
     S.busy = false;
+  }
+}
+
+/* ===================== nouveautés d'un rafraîchissement ===================== */
+
+// L'empreinte de l'historique affiché : ses commits, la tête de chaque branche et la sélection
+function historyKeys(){
+  return {
+    shas: new Set(S.commits.keys()),
+    heads: new Map(S.branches.map(b => [b.name, b.commit.sha])),
+    selected: new Set(S.selected)
+  };
+}
+
+// Ce qui a changé entre l'empreinte précédente et l'historique qui vient d'être lu. Une branche est
+// « réécrite » quand son ancienne tête a disparu de son histoire (force-push, rebase).
+function diffHistory(prev, branches, commits, created){
+  const now = new Map(branches.map(b => [b.name, b.commit.sha]));
+  return {
+    nouveaux: new Set([...commits.keys()].filter(sha => !prev.shas.has(sha))),
+    created,
+    deleted: [...prev.heads.keys()].filter(n => !now.has(n)),
+    rewritten: [...prev.selected].filter(n => now.has(n) && now.get(n) !== prev.heads.get(n)
+                                              && !commits.has(prev.heads.get(n)))
+  };
+}
+
+// « branche créée : x » ou « 2 branches créées : x, y », en nommant au plus MAX_NAMES branches
+function namesPart(names, singulier, pluriel){
+  const liste = names.slice(0, MAX_NAMES).join(', ') + (names.length > MAX_NAMES ? '…' : '');
+  return names.length > 1 ? `${names.length} ${pluriel} : ${liste}` : `${singulier} : ${liste}`;
+}
+
+// Le résumé d'un rafraîchissement, pour la barre de statut
+function describeChanges(d){
+  const n = d.nouveaux.size;
+  const parts = n ? [`${n} nouveau${n > 1 ? 'x' : ''} commit${n > 1 ? 's' : ''}`] : [];
+
+  // Chaque famille de branches n'apparaît que si elle n'est pas vide
+
+  const familles = [[d.created, 'branche créée', 'branches créées'],
+                    [d.deleted, 'branche supprimée', 'branches supprimées'],
+                    [d.rewritten, 'branche réécrite', 'branches réécrites']];
+  for (const [names, singulier, pluriel] of familles.filter(f => f[0].length))
+    parts.push(namesPart(names, singulier, pluriel));
+
+  return parts.length ? parts.join(' · ') : 'Rien de nouveau';
+}
+
+/* ===================== mémoire de l'onglet ===================== */
+
+// Ce qui est affiché, pour le remontrer tel quel après un rechargement de la page
+function saveSnapshot(){
+  SS.set('snapshot', JSON.stringify({
+    repo: S.shown, owner: S.owner, name: S.repo, depth: S.depth, selected: [...S.selected],
+    branches: S.branches.map(b => ({ name: b.name, commit: { sha: b.commit.sha } })),
+    commits: [...S.commits.values()], refs: [...S.refs], nouveaux: [...S.nouveaux]
+  }));
+}
+
+// Remontre l'historique gardé par l'onglet, s'il concerne le dépôt demandé. Rend vrai si c'est le cas :
+// il ne reste alors qu'à le rafraîchir.
+function restoreSnapshot(saisie){
+  const cible = parseRepo(saisie);
+  let snap = null;
+  try{ snap = JSON.parse(SS.get('snapshot', 'null')); }catch(e){ snap = null; }
+  const ok = !!(cible && snap && snap.repo === repoKey(cible));
+
+  if (ok){
+    // L'onglet a gardé l'historique de ce dépôt
+
+    //
+    // Rétablir l'état, redessiner, puis revenir où l'on était
+    //
+
+    S.owner = snap.owner; S.repo = snap.name; S.depth = snap.depth;
+    S.selected = new Set(snap.selected);
+    S.branches = snap.branches;
+    S.commits = new Map(snap.commits.map(c => [c.sha, c]));
+    S.refs = new Map(snap.refs);
+    S.nouveaux = new Set(snap.nouveaux);
+    S.order = topoOrder(S.commits);
+    S.shown = snap.repo;
+    document.title = `${S.owner}/${S.repo} -- git-graph-web`;
+    draw();
+    renderBranchPicker();
+
+    // La position de défilement a été notée quand la page s'est fermée
+    restoreAnchor(readAnchor());
+
+  } else {
+    // L'onglet n'a rien gardé OU il a gardé un autre dépôt OU la saisie est invalide
+
+    // Rien à remontrer : le chargement partira d'un écran vide
+  }
+  return ok;
+}
+
+// La position notée à la fermeture de la page, ou null
+function readAnchor(){
+  let anchor = null;
+  try{ anchor = JSON.parse(SS.get('anchor', 'null')); }catch(e){ anchor = null; }
+  return anchor;
+}
+
+/* ===================== défilement stable ===================== */
+
+// Le premier commit visible sous la barre haute, et sa position à l'écran. Tout en haut, on ne
+// retient rien : on y reste, pour voir arriver les nouveautés au-dessus.
+function captureAnchor(){
+  let anchor = null;
+  if (window.scrollY > 0){
+    // On est descendu dans l'historique
+
+    // Retenir le premier commit visible, pour le remettre au même endroit après le redessin
+
+    const limite = $('header').getBoundingClientRect().bottom;
+    const li = [...$('#rows').children].find(el => el.getBoundingClientRect().bottom > limite);
+    anchor = li ? { sha: li.dataset.sha, top: li.getBoundingClientRect().top } : null;
+
+  } else {
+    // On est tout en haut de la page
+
+    // Rien à retenir
+  }
+  return anchor;
+}
+
+// Remet le commit retenu à sa place à l'écran, s'il est toujours affiché
+function restoreAnchor(anchor){
+  const li = anchor && document.querySelector(`#rows li[data-sha="${anchor.sha}"]`);
+  if (li){
+    // Le commit retenu fait toujours partie de l'historique
+
+    // Décaler la page de l'écart entre sa place d'avant et sa nouvelle place
+    window.scrollBy(0, li.getBoundingClientRect().top - anchor.top);
+
+  } else {
+    // Rien n'était retenu OU le commit a disparu de l'historique
+
+    // Laisser la page où elle est
   }
 }
 
@@ -747,6 +978,9 @@ function assignLanes(order, map){
 /* ===================== rendu ===================== */
 function draw(){
   const rowsEl = $('#rows'), svg = $('#lanes');
+
+  // Les lignes vont être reconstruites : on note d'abord le commit qu'on regardait
+  const anchor = captureAnchor();
   rowsEl.textContent = ''; svg.textContent = '';
   $('#empty').hidden = S.order.length > 0;
   $('#foot').hidden = S.order.length === 0;
@@ -829,6 +1063,21 @@ function draw(){
     const author = document.createElement('span');
     author.className = 'author';
     author.textContent = c.author;
+    if (S.nouveaux.has(c.sha)){
+      // Le commit est apparu au dernier rafraîchissement
+
+      // Le signaler en tête de la ligne de méta
+
+      const badge = document.createElement('span');
+      badge.className = 'nouveau-badge';
+      badge.textContent = 'nouveau';
+      meta.appendChild(badge);
+
+    } else {
+      // Le commit était déjà là avant le dernier rafraîchissement
+
+      // Rien à signaler
+    }
     meta.append(sha, author, document.createTextNode(` · ${relDate(c.date)}`));
 
     if (refsEl) li.appendChild(refsEl);
@@ -891,8 +1140,11 @@ function draw(){
   });
   svg.appendChild(frag);
 
-  // Les lignes viennent d'être reconstruites : on y repeint les résultats de la recherche
+  // Les lignes viennent d'être reconstruites : on y repeint les résultats de la recherche, puis on
+  // remet sous les yeux le commit qu'on regardait
+
   paintSearch();
+  restoreAnchor(anchor);
 }
 
 function relDate(iso){
@@ -1441,7 +1693,7 @@ function setStatus(msg, isError){
 }
 
 /* ===================== branchements ===================== */
-$('#load').onclick = () => { S.depth = 100; hideRecents(); loadRepo(); };
+$('#load').onclick = () => { hideRecents(); requestLoad(); };
 $('#repo').addEventListener('keydown', e => {
 
   if (e.key === 'Enter'){
@@ -1451,8 +1703,7 @@ $('#repo').addEventListener('keydown', e => {
 
     e.preventDefault();
     hideRecents();
-    S.depth = 100;
-    loadRepo();
+    requestLoad();
 
   } else if (e.key === 'Escape'){
     // La touche Échap demande l'abandon de la liste
@@ -1533,7 +1784,7 @@ $('#save-token').onclick = () => {
   S.token = $('#token').value.trim();
   LS.set('token', S.token || null);
   openDrawer('token', false);
-  if (S.owner) loadRepo({keepBranches:true});
+  if (S.owner) requestLoad();
 };
 $('#clear-token').onclick = () => { S.token = ''; $('#token').value = ''; LS.set('token', null);
                                     setStatus("Jeton supprimé."); };
@@ -1591,7 +1842,38 @@ $('#token').value = S.token;
 
 const params = new URLSearchParams(location.search);
 const start = params.get('repo') || LS.get('repo', '');
-if (start){ $('#repo').value = start; showRepoEnd(); loadRepo(); }
+// La page gère elle-même sa position de défilement : celle du navigateur s'appliquerait avant que
+// l'historique ne soit redessiné
+history.scrollRestoration = 'manual';
+
+// En quittant la page (rechargement compris), on note le commit qu'on regardait
+window.addEventListener('pagehide', () => SS.set('anchor', JSON.stringify(captureAnchor())));
+
+if (start){
+  // Un dépôt est à ouvrir dès le démarrage
+
+  // L'onglet remontre d'abord ce qu'il affichait, puis le rafraîchit ; sinon, chargement normal
+
+  $('#repo').value = start;
+  showRepoEnd();
+  if (restoreSnapshot(start)){
+    // L'historique de ce dépôt était encore affiché avant le rechargement
+
+    // Le rafraîchir en marquant les nouveautés
+    loadRepo({ keepBranches:true, refresh:true });
+
+  } else {
+    // Rien n'était gardé pour ce dépôt
+
+    // Le charger depuis un écran vide
+    loadRepo();
+  }
+
+} else {
+  // Aucun dépôt à ouvrir
+
+  // L'écran d'accueil reste affiché
+}
 
 // On demande explicitement la vérification de mise à jour : sans elle, un navigateur qui a déjà
 // une version en cache peut resservir l'ancienne app pendant plusieurs chargements.
