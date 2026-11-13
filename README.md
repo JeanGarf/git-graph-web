@@ -59,6 +59,30 @@ ce qui fait un bon marque-page par projet. L'application inscrit d'elle-même le
 l'URL de l'onglet : chaque onglet garde donc son propre dépôt, et un rafraîchissement rejoue bien
 celui-là. Le jeton, lui, est partagé par tous les onglets du navigateur.
 
+## Rafraîchir et voir ce qui a changé
+
+Deux gestes rafraîchissent le dépôt affiché : le bouton ⟳ (ou Entrée dans le champ, ou un clic sur
+ce même dépôt dans la liste de reprise) et le « tirer pour rafraîchir » d'Android, qui recharge
+toute la page. Dans les deux cas, l'ancien historique **reste à l'écran** jusqu'à ce que le nouveau
+le remplace ; la barre de statut, logée dans la barre haute, signale la lecture même quand on est
+descendu dans la liste.
+
+- Après un rechargement de page, l'onglet remontre aussitôt ce qu'il affichait : il en garde une
+  copie dans son stockage de session (`sessionStorage`), propre à l'onglet et effacée avec lui,
+  ainsi que la position de défilement notée à la fermeture.
+- Les commits apparus depuis l'affichage précédent portent une pastille verte **nouveau**, jusqu'au
+  rafraîchissement suivant. « Charger 100 commits de plus » et le filtre de branches les conservent.
+- La barre de statut résume l'écart pendant quelques secondes (`CHANGES_STATUS_MS`) :
+  « 3 nouveaux commits · branche créée : feature/x · branche supprimée : y », ou « Rien de
+  nouveau ». Une branche **réécrite** est une branche dont l'ancienne tête a disparu de son
+  histoire (force-push, rebase).
+- Les branches créées entre-temps s'ajoutent d'elles-mêmes aux branches affichées.
+- Si l'on était descendu dans l'historique, le commit qu'on regardait reste à la même place à
+  l'écran : les nouveautés s'insèrent au-dessus sans faire sauter la liste. Tout en haut, on y
+  reste, pour les voir arriver.
+- Rafraîchir garde la profondeur chargée et les branches choisies. Ouvrir un **autre** dépôt repart,
+  lui, des 100 derniers commits, sans marque, en haut de la liste.
+
 ## Refermer la feuille de détail
 
 Un commit touché ouvre une feuille par le bas. Elle se referme de quatre façons : le bouton
@@ -161,6 +185,10 @@ const DOT = 4.6;       // rayon des pastilles
 const MAX_GUTTER = 132;// largeur maximale réservée au graphe
 const COLORS = [...];  // palette cyclique des couloirs
 ```
+
+Et un peu plus bas, parmi les autres réglages : `STATUS_MS` (durée d'un message de statut),
+`CHANGES_STATUS_MS` (durée du résumé d'un rafraîchissement) et `MAX_NAMES` (branches nommées au plus
+dans ce résumé).
 
 La hauteur d'une ligne suit son contenu : le titre s'étale sur trois lignes au plus (deux plus une
 ligne de références quand il y en a, via `-webkit-line-clamp`), puis la ligne de méta, puis un vide
